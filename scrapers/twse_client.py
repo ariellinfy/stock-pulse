@@ -19,7 +19,7 @@ from pathlib import Path
 
 # 讓 scrapers/ 以外也能 import utils
 sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_STOCK_DIR, today_str
+from utils import get_logger, save_json, RAW_DIR, today_str
 
 logger = get_logger("twse_client")
 
@@ -97,8 +97,7 @@ def run() -> Path | None:
     logger.info(f"資料筆數: {len(df)}")
 
     # 儲存
-    filename = f"twse_{today_str()}.json"
-    filepath = save_json(tagged, RAW_STOCK_DIR, filename, gcs_source="twse")
+    filepath = save_json(tagged, RAW_DIR, gcs_source="twse")
     logger.info(f"已儲存至 {filepath}")
     return filepath
 

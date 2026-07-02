@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_FG_DIR, today_str
+from utils import get_logger, save_json, RAW_DIR, today_str
 
 logger = get_logger("fear_greed_client")
 
@@ -125,8 +125,7 @@ def run() -> Path | None:
     print(f"  一年前    : {record['previous_1_year']}")
     print(f"  VIX 子指標: {record['market_volatility_vix']}")
 
-    filename = f"fear_greed_{today_str()}.json"
-    filepath = save_json(record, RAW_FG_DIR, filename, gcs_source="cnn_fear_greed")
+    filepath = save_json(record, RAW_DIR, gcs_source="cnn_fear_greed")
     logger.info(f"已儲存至 {filepath}")
     return filepath
 

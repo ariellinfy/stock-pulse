@@ -22,9 +22,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 PROJECT_ROOT   = Path(__file__).resolve().parent.parent
 DATA_TEST_ROOT = PROJECT_ROOT / "data_test"
 
-RAW_STOCK_DIR = DATA_TEST_ROOT / "raw" / "stock"
-RAW_NEWS_DIR  = DATA_TEST_ROOT / "raw" / "news"
-RAW_FG_DIR    = DATA_TEST_ROOT / "raw" / "fear_greed"
+RAW_DIR = DATA_TEST_ROOT / "raw"
 
 # ── GCS 設定 ─────────────────────────────────────────────
 USE_GCS        = os.environ.get("USE_GCS", "false").lower() == "true"
@@ -68,7 +66,6 @@ def ensure_dir(path: Path) -> Path:
 def save_json(
     data: list | dict,
     directory: Path,
-    filename: str,
     gcs_source: str = "",
     hourly: bool = False,        # True → 加 /hr=HH（新聞每小時執行用）
     gcs_extra_path: str = "",    # dt= 之後的額外子路徑（yahoo 按 symbol 分）
@@ -89,8 +86,15 @@ def save_json(
       raw/cnn_fear_greed/dt=2026-07-02/data.json
     """
     # 1. 寫本地
-    ensure_dir(directory)
-    local_path = directory / filename
+
+    base      = f"{directory}/{gcs_source}/dt={today_str()}"
+    extra     = f"/{gcs_extra_path}" if gcs_extra_path else ""
+    hour      = f"/hr={hour_str()}" if hourly else ""
+    full_dir = Path(f"{base}{extra}{hour}")
+    ensure_dir(full_dir)
+    filename = "data.json"
+        
+    local_path = full_dir / filename
     with open(local_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 

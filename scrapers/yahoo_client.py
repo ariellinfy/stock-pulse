@@ -25,7 +25,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_STOCK_DIR, today_str
+from utils import get_logger, save_json, RAW_DIR, today_str
 
 logger = get_logger("yahoo_client")
 
@@ -133,8 +133,7 @@ def run_backfill(
         if records:
             # 每支股票存一個獨立 JSON（symbol 中的 . 換成 _）
             safe_name = symbol.replace(".", "_")
-            filename  = f"yfinance_backfill_{safe_name}_{start}_to_{end}.json"
-            filepath  = save_json(records, RAW_STOCK_DIR, filename, gcs_source="yahoo")
+            filepath  = save_json(records, RAW_DIR, gcs_source="yahoo", gcs_extra_path=f"symbol={safe_name}")
             summary[symbol] = len(records)
             logger.info(f"  ✓ {symbol}: {len(records)} 筆 → {filepath.name}")
         else:

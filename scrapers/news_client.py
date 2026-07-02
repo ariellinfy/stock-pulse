@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_NEWS_DIR, ts_str, today_str
+from utils import get_logger, save_json, RAW_DIR, ts_str, today_str
 
 logger = get_logger("news_client")
 
@@ -280,8 +280,7 @@ def run() -> Path | None:
     dup_removed = len(all_articles) - len(unique)
     logger.info(f"合計 {len(unique)} 筆（移除 {dup_removed} 筆重複）")
 
-    filename = f"news_{ts_str()}.json"
-    filepath = save_json(unique, RAW_NEWS_DIR, filename, gcs_source="news", hourly=True)
+    filepath = save_json(unique, RAW_DIR,  gcs_source="news", hourly=True)
     logger.info(f"已儲存至 {filepath}")
 
     logger.info("=== 範例資料（前 2 筆）===")
