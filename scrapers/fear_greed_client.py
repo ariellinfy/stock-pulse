@@ -12,7 +12,7 @@ CNN Fear & Greed Index 抓取腳本（非官方 API）
   - 本腳本每日執行一次即可（Airflow 設 @daily）
 
 執行方式（本地測試）:
-  python scrapers/fear_greed.py
+  python scrapers/fear_greed_client.py
 """
 
 import sys
@@ -126,7 +126,7 @@ def run() -> Path | None:
     print(f"  VIX 子指標: {record['market_volatility_vix']}")
 
     filename = f"fear_greed_{today_str()}.json"
-    filepath = save_json(record, RAW_FG_DIR, filename)
+    filepath = save_json(record, RAW_FG_DIR, filename, gcs_source="cnn_fear_greed")
     logger.info(f"已儲存至 {filepath}")
     return filepath
 

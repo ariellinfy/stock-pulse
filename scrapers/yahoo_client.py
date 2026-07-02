@@ -8,7 +8,7 @@ Yahoo Finance — 一次性歷史資料回填腳本
   - 日常更新改由 TWSE 每日快照累積，此腳本不重複執行
 
 執行方式（本地測試）:
-  python scrapers/yahoo.py
+  python scrapers/yahoo_client.py
 
 注意:
   - Yahoo Finance 台股代號格式為 "2330.TW"（上市）或 "6531.TWO"（上櫃）
@@ -134,7 +134,7 @@ def run_backfill(
             # 每支股票存一個獨立 JSON（symbol 中的 . 換成 _）
             safe_name = symbol.replace(".", "_")
             filename  = f"yfinance_backfill_{safe_name}_{start}_to_{end}.json"
-            filepath  = save_json(records, RAW_STOCK_DIR, filename)
+            filepath  = save_json(records, RAW_STOCK_DIR, filename, gcs_source="yahoo")
             summary[symbol] = len(records)
             logger.info(f"  ✓ {symbol}: {len(records)} 筆 → {filepath.name}")
         else:

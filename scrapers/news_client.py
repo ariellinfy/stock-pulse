@@ -1,7 +1,7 @@
 """
 財經新聞抓取腳本 v4
 來源:
-  1. 鉅亨網 JSON API (台股新聞)  — https://api.cnyes.com/media/api/v1/newslist/category/tw_stock
+  1. 鉅亨網 JSON API  — https://api.cnyes.com/media/api/v1/newslist/category/tw_stock
   2. Yahoo Finance    — yfinance 內建 .news，按股票代號抓相關新聞
 """
 
@@ -281,7 +281,7 @@ def run() -> Path | None:
     logger.info(f"合計 {len(unique)} 筆（移除 {dup_removed} 筆重複）")
 
     filename = f"news_{ts_str()}.json"
-    filepath = save_json(unique, RAW_NEWS_DIR, filename)
+    filepath = save_json(unique, RAW_NEWS_DIR, filename, gcs_source="news", hourly=True)
     logger.info(f"已儲存至 {filepath}")
 
     logger.info("=== 範例資料（前 2 筆）===")

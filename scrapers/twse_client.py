@@ -8,7 +8,7 @@ API: https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
   - 每日由 Airflow DAG 觸發，累積後形成歷史資料
 
 執行方式（本地測試）:
-  python scrapers/twse.py
+  python scrapers/twse_client.py
 """
 
 import sys
@@ -98,7 +98,7 @@ def run() -> Path | None:
 
     # 儲存
     filename = f"twse_{today_str()}.json"
-    filepath = save_json(tagged, RAW_STOCK_DIR, filename)
+    filepath = save_json(tagged, RAW_STOCK_DIR, filename, gcs_source="twse")
     logger.info(f"已儲存至 {filepath}")
     return filepath
 
