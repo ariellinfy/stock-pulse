@@ -1,10 +1,11 @@
 """
-共用工具模組 v4
+共用工具模組 v5
 - USE_GCS=true 時上傳 GCS
 - Blob 格式:
-    每日資料: raw/{source}/dt=YYYY-MM-DD/data.json          （覆蓋 = idempotent）
-    每小時資料: raw/{source}/dt=YYYY-MM-DD/hr=HH/data.json  （各小時獨立）
-- 重跑同一天/同一小時會直接覆蓋，保證 Idempotency
+    每日:        raw/{source}/dt=YYYY-MM-DD/data.json
+    每日+symbol: raw/{source}/dt=YYYY-MM-DD/{extra}/data.json
+    每小時:      raw/{source}/dt=YYYY-MM-DD/hr=HH/data.json
+- 重跑同一週期覆蓋同一 blob，保證 Idempotency
 """
 
 import os
@@ -69,18 +70,22 @@ def save_json(
     directory: Path,
     filename: str,
     gcs_source: str = "",
-    hourly: bool = False,     # True = 每小時執行（新聞），加 hr=HH 分層
+    hourly: bool = False,        # True → 加 /hr=HH（新聞每小時執行用）
+    gcs_extra_path: str = "",    # dt= 之後的額外子路徑（yahoo 按 symbol 分）
 ) -> Path:
     """
     統一儲存入口。本地永遠寫檔，USE_GCS=true 時額外上傳 GCS。
 
-    GCS Blob 路徑（Idempotent — 重跑同一週期會覆蓋）:
-      每日: raw/{source}/dt=YYYY-MM-DD/data.json
-      每時: raw/{source}/dt=YYYY-MM-DD/hr=HH/data.json
+    GCS Blob 路徑（Idempotent：重跑同一週期覆蓋同一 blob）:
+
+      raw/{source}/dt=YYYY-MM-DD/data.json                  ← 一般每日
+      raw/{source}/dt=YYYY-MM-DD/{extra}/data.json          ← yahoo 按 symbol
+      raw/{source}/dt=YYYY-MM-DD/hr=HH/data.json            ← 新聞每小時
 
     範例:
       raw/twse/dt=2026-07-02/data.json
-      raw/cnyes/dt=2026-07-02/hr=08/data.json
+      raw/yahoo/dt=2026-07-02/2330_TW/data.json
+      raw/news/dt=2026-07-02/hr=08/data.json
       raw/cnn_fear_greed/dt=2026-07-02/data.json
     """
     # 1. 寫本地
@@ -98,13 +103,22 @@ def save_json(
         _logger.error("[GCS] gcs_source 未傳入，無法上傳")
         return local_path
 
-    _upload_to_gcs(local_path, gcs_source, hourly)
+    _upload_to_gcs(local_path, gcs_source, hourly, gcs_extra_path)
     return local_path
 
 
-def _upload_to_gcs(local_path: Path, gcs_source: str, hourly: bool) -> None:
+def _upload_to_gcs(
+    local_path: Path,
+    gcs_source: str,
+    hourly: bool,
+    gcs_extra_path: str = "",
+) -> None:
     """
-    上傳到 GCS。重跑同一週期會覆蓋同一個 blob，保證 Idempotency。
+    路徑組合邏輯:
+      base  = raw/{source}/dt=YYYY-MM-DD
+      extra = /{gcs_extra_path}   若有，例如 /2330_TW
+      hour  = /hr=HH              若 hourly=True
+      final = {base}{extra}{hour}/data.json
     """
     if not GCS_BUCKET:
         _logger.error("USE_GCS=true 但 GCP_BUCKET_NAME 未設定，請檢查 .env")
@@ -113,17 +127,17 @@ def _upload_to_gcs(local_path: Path, gcs_source: str, hourly: bool) -> None:
     try:
         from google.cloud import storage
 
-        date_part = f"dt={today_str()}"
-        hour_part = f"/hr={hour_str()}" if hourly else ""
-        blob_path = f"{GCS_RAW_PREFIX}/{gcs_source}/{date_part}{hour_part}/data.json"
+        base      = f"{GCS_RAW_PREFIX}/{gcs_source}/dt={today_str()}"
+        extra     = f"/{gcs_extra_path}" if gcs_extra_path else ""
+        hour      = f"/hr={hour_str()}" if hourly else ""
+        blob_path = f"{base}{extra}{hour}/data.json"
 
         client = storage.Client()
         bucket = client.bucket(GCS_BUCKET)
         blob   = bucket.blob(blob_path)
 
-        # GCS upload_from_filename 預設覆蓋已存在的 blob → Idempotent ✅
+        # 預設覆蓋已存在的 blob → Idempotent ✅
         blob.upload_from_filename(str(local_path), content_type="application/json")
-
         _logger.info(f"[GCS] gs://{GCS_BUCKET}/{blob_path}")
 
     except Exception as e:
