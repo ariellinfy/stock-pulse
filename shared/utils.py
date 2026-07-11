@@ -10,25 +10,24 @@ def get_gcs_client(key_path: str = "secrets/gcp-sa-key.json") -> storage.Client:
     return storage.Client()
 
 
-def write_raw_json(
+def write_raw_partitioned(
     client: storage.Client,
     bucket_name: str,
     source_name: str,
-    target_date: date,
+    partition_key: str,
+    partition_value: str,
     content: str,
 ) -> str:
     """
-    將原始資料(JSON 字串)以冪等方式寫入 GCS Raw Layer。
+    通用的冪等寫入函式,分區方式由呼叫端決定(不限於日期)。
 
-    路徑格式: raw/{source_name}/dt={YYYY-MM-DD}/data.json
-    - 同一個 source_name + target_date 重複執行,會直接覆蓋舊檔,
-      不會產生重複檔案。這就是「冪等性」:多次執行結果等同一次執行。
+    路徑格式: raw/{source_name}/{partition_key}={partition_value}/data.json
 
-    回傳: 寫入後的完整 GCS path,方便呼叫端印 log 確認。
+    例如:
+        partition_key="dt", partition_value="2026-07-08"       → 按日期分區(TWSE/TPEx)
+        partition_key="stock_id", partition_value="1240"        → 按股票代號分區(Yahoo 歷史回補)
     """
-    dt_str = target_date.strftime("%Y-%m-%d")
-    blob_path = f"raw/{source_name}/dt={dt_str}/data.json"
-
+    blob_path = f"raw/{source_name}/{partition_key}={partition_value}/data.json"
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
     blob.upload_from_string(content, content_type="application/json")
@@ -36,6 +35,42 @@ def write_raw_json(
     full_path = f"gs://{bucket_name}/{blob_path}"
     print(f"✅ 已寫入(冪等覆蓋): {full_path}")
     return full_path
+
+
+def write_raw_json(
+    client: storage.Client,
+    bucket_name: str,
+    source_name: str,
+    target_date: date,
+    content: str,
+) -> str:
+    """按日期分區的寫入(既有邏輯不變,只是內部改呼叫通用函式)。"""
+    dt_str = target_date.strftime("%Y-%m-%d")
+    return write_raw_partitioned(client, bucket_name, source_name, "dt", dt_str, content)
+
+
+def raw_blob_exists_partitioned(
+    client: storage.Client,
+    bucket_name: str,
+    source_name: str,
+    partition_key: str,
+    partition_value: str,
+) -> bool:
+    """通用版本的斷點續跑檢查,對應 write_raw_partitioned。"""
+    blob_path = f"raw/{source_name}/{partition_key}={partition_value}/data.json"
+    blob = client.bucket(bucket_name).blob(blob_path)
+    return blob.exists()
+
+
+def raw_blob_exists(
+    client: storage.Client,
+    bucket_name: str,
+    source_name: str,
+    target_date: date,
+) -> bool:
+    """既有邏輯不變,只是內部改呼叫通用函式。"""
+    dt_str = target_date.strftime("%Y-%m-%d")
+    return raw_blob_exists_partitioned(client, bucket_name, source_name, "dt", dt_str)
 
 
 def normalize_stock_id(raw_id: str) -> Tuple[str, str]:
