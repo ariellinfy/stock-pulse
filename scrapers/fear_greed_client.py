@@ -10,13 +10,12 @@ CNN Fear & Greed Index 爬蟲
 
 import sys
 import json
+import requests
 from datetime import date
 from pathlib import Path
 
-import requests
-
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json
+from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 
@@ -86,7 +85,6 @@ if __name__ == "__main__":
     result = fetch_fear_greed(start_date)
 
     if result:
-        BUCKET_NAME = "stock-pulse-data-lake"
         client = get_gcs_client()
 
         content = json.dumps(result, ensure_ascii=False)

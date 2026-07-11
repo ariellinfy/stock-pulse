@@ -11,13 +11,12 @@ TWSE 每日全市場收盤行情爬蟲
 
 import sys
 import json
+import requests
 from datetime import date
 from pathlib import Path
 
-import requests
-
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json
+from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 TWSE_URL = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 DAILY_QUOTES_TABLE_INDEX = 8  # 「每日收盤行情(全部...)」在 tables 陣列中的位置
@@ -117,7 +116,6 @@ if __name__ == "__main__":
         # print("\n✅ 已存到 local_output/twse_daily_2026-07-08.json")
 
         # 寫入 GCS Raw Layer(冪等覆蓋)
-        BUCKET_NAME = "stock-pulse-data-lake"  # 改成你的 bucket 名稱
         client = get_gcs_client()
 
         content = json.dumps(result, ensure_ascii=False)

@@ -17,14 +17,13 @@
 import sys
 import io
 import json
+import requests
 from datetime import date
 from pathlib import Path
-
-import requests
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json
+from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 URLS = {
     "TWSE": "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
@@ -54,7 +53,6 @@ def fetch_industry_list(market: str) -> list[dict] | None:
 
 
 if __name__ == "__main__":
-    BUCKET_NAME = "stock-pulse-data-lake"
     client = get_gcs_client()
     today = date.today()
 

@@ -18,10 +18,9 @@ from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_partitioned, raw_blob_exists_partitioned
+from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_partitioned, raw_blob_exists_partitioned
 from scrapers.yahoo_client import fetch_yahoo_history
 
-BUCKET_NAME = "stock-pulse-data-lake"
 SOURCE_NAME = "yahoo_tpex_history"
 
 

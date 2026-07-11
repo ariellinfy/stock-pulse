@@ -17,7 +17,6 @@ from pathlib import Path
 import yfinance as yf
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import normalize_stock_id
 
 
 def build_yahoo_ticker(stock_id: str, market: str) -> str:

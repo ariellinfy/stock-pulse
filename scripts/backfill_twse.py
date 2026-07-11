@@ -13,10 +13,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json, raw_blob_exists
+from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_json, raw_blob_exists
 from scrapers.twse_client import fetch_daily_quotes
 
-BUCKET_NAME = "stock-pulse-data-lake"
+SOURCE_NAME = "twse_daily"
 
 
 def generate_date_range(start: date, end: date) -> list[date]:
@@ -36,7 +36,7 @@ def backfill_twse(start: date, end: date):
 
     for target_date in date_list:
         # 斷點續跑核心邏輯:已存在就跳過
-        if raw_blob_exists(client, BUCKET_NAME, "twse_daily", target_date):
+        if raw_blob_exists(client, BUCKET_NAME, SOURCE_NAME, target_date):
             print(f"⏭️  {target_date} 已存在,跳過")
             skipped += 1
             continue
@@ -49,7 +49,7 @@ def backfill_twse(start: date, end: date):
 
         import json
         content = json.dumps(result, ensure_ascii=False)
-        write_raw_json(client, BUCKET_NAME, "twse_daily", target_date, content)
+        write_raw_json(client, BUCKET_NAME, SOURCE_NAME, target_date, content)
         succeeded += 1
 
     print(f"\n=== 回補完成 ===")
@@ -58,12 +58,12 @@ def backfill_twse(start: date, end: date):
 
 if __name__ == "__main__":
     # 先用小範圍測試(5 天),確認流程正確再擴大
-    # backfill_twse(
-    #     start=date(2026, 7, 1),
-    #     end=date(2026, 7, 8),
-    # )
-
     backfill_twse(
-        start=date(2024, 7, 1),   # 往回抓約 2 年,確保涵蓋 500+ 個交易日,含 MA200 暖機空間
-        end=date(2026, 7, 10),     # 到目前為止(不含已經在小規模測試時抓過的 7/11,那天等每日排程處理)
+        start=date(2026, 7, 1),
+        end=date(2026, 7, 8),
     )
+
+    # backfill_twse(
+    #     start=date(2024, 7, 1),   # 往回抓約 2 年,確保涵蓋 500+ 個交易日,含 MA200 暖機空間
+    #     end=date(2026, 7, 10),     # 到目前為止(不含已經在小規模測試時抓過的 7/11,那天等每日排程處理)
+    # )

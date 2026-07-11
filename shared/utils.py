@@ -3,6 +3,24 @@ from google.cloud import storage
 from datetime import date
 from typing import Tuple
 
+from dotenv import load_dotenv
+
+load_dotenv()  # 讀取專案根目錄的 .env 檔案
+
+def get_required_env(key: str) -> str:
+    """
+    讀取必要的環境變數,若不存在則立即中斷並給出清楚的錯誤訊息。
+    回傳型態明確是 str(不是 str | None),讓呼叫端不需要再處理 None 的情況。
+    """
+    value = os.environ.get(key)
+    if value is None:
+        raise RuntimeError(f"環境變數 {key} 未設定,請確認 .env 檔案存在且內容正確")
+    return value
+
+
+BUCKET_NAME: str = get_required_env("GCP_BUCKET_NAME")
+SA_KEY_PATH: str = os.environ.get("GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
+
 
 def get_gcs_client(key_path: str = "secrets/gcp-sa-key.json") -> storage.Client:
     """回傳一個已認證的 GCS client。"""

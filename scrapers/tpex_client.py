@@ -11,13 +11,12 @@ TPEx 每日全市場收盤行情爬蟲(上櫃)
 
 import sys
 import json
+import requests
 from datetime import date
 from pathlib import Path
 
-import requests
-
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json
+from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 TPEX_URL = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php"
 
@@ -100,7 +99,6 @@ if __name__ == "__main__":
         for row in result["data"][:2]:
             print(row)
 
-        BUCKET_NAME = "stock-pulse-data-lake"
         client = get_gcs_client()
 
         content = json.dumps(result, ensure_ascii=False)
