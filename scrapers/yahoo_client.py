@@ -1,167 +1,163 @@
 """
-Yahoo Finance — 一次性歷史資料回填腳本
-套件: yfinance (https://github.com/ranaroussi/yfinance)
+Yahoo Finance 備援/歷史回補爬蟲
 
 用途:
-  - 專案啟動時執行一次，把過去 N 個月的歷史 K 線資料補齊
-  - 提供 Spark 計算技術指標（MA/RSI/MACD）所需的連續歷史
-  - 日常更新改由 TWSE 每日快照累積，此腳本不重複執行
+  1. 每日備援校驗(階段 3.3):單日查詢,跟 TWSE/TPEx 官方資料比對
+  2. TPEx 歷史回補(階段 2.3):日期區間查詢,因 TPEx 官方無開放歷史 API
 
-執行方式（本地測試）:
-  python scrapers/yahoo_client.py
-
-注意:
-  - Yahoo Finance 台股代號格式為 "2330.TW"（上市）或 "6531.TWO"（上櫃）
-  - yfinance 為非官方套件，偶有不穩定，已加入 retry 機制
-  - 回填完成後請勿重複大量執行，避免被限速
+設計原則: 一個通用核心函式,兩種用途都呼叫它,只是傳入的日期區間不同。
 """
 
 import sys
 import time
 import json
-import yfinance as yf
-import pandas as pd
+from datetime import date, timedelta
 from pathlib import Path
-from datetime import datetime, timedelta
 
-sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_DIR, today_str
+import yfinance as yf
 
-logger = get_logger("yahoo_client")
-
-# ── 設定區 ────────────────────────────────────────────────
-
-# 回填區間（預設過去 1 年，Spark 算 MA60/RSI 至少需要 60+ 交易日）
-BACKFILL_MONTHS = 12
-
-# 目標股票清單（Yahoo Finance 格式）
-# 上市加 .TW，上櫃加 .TWO
-# 可依需求擴充，建議先用少量清單測試
-STOCK_LIST = [
-    "2330.TW",   # 台積電
-    "2317.TW",   # 鴻海
-    "2454.TW",   # 聯發科
-    "2881.TW",   # 富邦金
-    "2882.TW",   # 國泰金
-    "0050.TW",   # 元大台灣50 ETF
-    "0056.TW",   # 元大高股息 ETF
-    "2308.TW",   # 台達電
-    "2412.TW",   # 中華電
-    "3711.TW",   # 日月光投控
-]
-
-# 每次 API 呼叫之間的等待秒數（避免被 rate limit）
-SLEEP_BETWEEN_REQUESTS = 1.0
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from shared.utils import normalize_stock_id
 
 
-# ── 核心函式 ─────────────────────────────────────────────
+def build_yahoo_ticker(stock_id: str, market: str) -> str:
+    """
+    根據我們系統內部的 (代號, market) 組出 Yahoo 需要的 ticker。
+    market 必須是 'TWSE' 或 'TPEx'(對應 normalize_stock_id 的回傳值)。
+    """
+    suffix = {"TWSE": ".TW", "TPEx": ".TWO"}.get(market)
+    if suffix is None:
+        raise ValueError(f"不支援的 market: {market}")
+    return f"{stock_id}{suffix}"
 
-def calc_date_range(months: int) -> tuple[str, str]:
-    end   = datetime.now()
-    start = end - timedelta(days=months * 31)
-    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
+def save_failed_list(failed: list[str], filepath: str = "local_output/yahoo_failed_stocks.json"):
+    """把失敗清單存成本地檔案,方便之後重跑補抓。"""
+    Path(filepath).parent.mkdir(exist_ok=True)
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(failed, f, ensure_ascii=False, indent=2)
+    print(f"✅ 失敗清單已存至 {filepath}")
 
-def fetch_single_stock(
-    symbol: str,
-    start: str,
-    end: str,
-    retries: int = 3,
+    
+def fetch_batch(
+    stock_list: list[dict],  # 每個 dict 需要有 'stock_id' 跟 'market'
+    start_date: date,
+    end_date: date,
+    delay_seconds: float = 1.5,
+) -> dict:
+    """
+    批次抓取多支股票的 Yahoo 歷史資料,單支失敗不中斷整批。
+
+    回傳:
+        {
+            "success": {stock_id: [records...], ...},
+            "failed": [stock_id, ...],  # 失敗清單,供之後補抓使用
+        }
+    """
+    success: dict[str, list[dict]] = {}
+    failed: list[str] = []
+    total = len(stock_list)
+
+    for i, item in enumerate(stock_list, start=1):
+        stock_id = item["stock_id"]
+        market = item["market"]
+
+        print(f"[{i}/{total}] 抓取 {stock_id} ({market})...")
+        result = fetch_yahoo_history(stock_id, market, start_date, end_date)
+
+        if result:
+            success[stock_id] = result
+        else:
+            failed.append(stock_id)
+
+        # 每支股票之間都要間隔,即使失敗也要等,避免連續失敗時反而打更快
+        time.sleep(delay_seconds)
+
+    print(f"\n=== 批次完成 ===")
+    print(f"成功: {len(success)} / {total}")
+    print(f"失敗: {len(failed)} 檔: {failed}")
+
+    return {"success": success, "failed": failed}
+
+    
+def fetch_yahoo_history(
+    stock_id: str,
+    market: str,
+    start_date: date,
+    end_date: date,
+    max_retries: int = 3,
 ) -> list[dict] | None:
     """
-    抓取單支股票的日K歷史資料。
-    回傳格式: list of dict，每筆為一個交易日。
-    """
-    for attempt in range(1, retries + 1):
-        try:
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(start=start, end=end, auto_adjust=True)
+    抓取單一股票在 [start_date, end_date] 區間(含頭含尾)的歷史資料。
 
-            if df.empty:
-                logger.warning(f"[{symbol}] 無資料（可能代號錯誤或區間無交易日）")
+    注意: yfinance 的 end 參數本身是不包含的,所以這裡內部會自動 +1 天,
+          讓呼叫端可以用直覺的「含頭含尾」方式指定區間,不用自己記這個細節。
+
+    回傳: list of dict,每筆記錄一天。失敗或無資料回傳 None。
+    """
+    ticker_symbol = build_yahoo_ticker(stock_id, market)
+    yahoo_end = end_date + timedelta(days=1)  # 修正 yfinance 右邊界不含的行為
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            ticker = yf.Ticker(ticker_symbol)
+            hist = ticker.history(start=start_date.isoformat(), end=yahoo_end.isoformat())
+
+            if hist.empty:
+                print(f"⚠️ {ticker_symbol} 無資料(可能是新股、下市或非交易區間)")
                 return None
 
-            df = df.reset_index()
-            df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-            df["symbol"] = symbol
-            df["_source"] = "yahoo_finance"
-            df["_fetched_date"] = today_str()
+            # 把 DatetimeIndex 轉成單純的日期字串,並保留原始股票代號/市場資訊
+            records = []
+            for idx, row in hist.iterrows():
+                records.append({
+                    "stock_id": stock_id,
+                    "market": market,
+                    "trade_date": idx.strftime("%Y-%m-%d"),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": int(row["Volume"]),  # 成交量是整數股數,用 int 更準確
+                })
 
-            # 只保留需要的欄位，統一命名（後續 Spark 清洗會進一步處理）
-            df = df.rename(columns={
-                "Date":   "date",
-                "Open":   "open",
-                "High":   "high",
-                "Low":    "low",
-                "Close":  "close",
-                "Volume": "volume",
-            })
-
-            keep_cols = ["date", "open", "high", "low", "close", "volume",
-                         "symbol", "_source", "_fetched_date"]
-            df = df[[c for c in keep_cols if c in df.columns]]
-
-            return df.to_dict(orient="records")
+            print(f"✅ {ticker_symbol} 取得 {len(records)} 筆資料")
+            return records
 
         except Exception as e:
-            logger.error(f"[{symbol}] 第 {attempt} 次失敗: {e}")
-            if attempt < retries:
+            print(f"⚠️ {ticker_symbol} 第 {attempt} 次嘗試失敗: {e}")
+            if attempt < max_retries:
                 time.sleep(3)
 
+    print(f"❌ {ticker_symbol} 已達最大重試次數,放棄")
     return None
 
 
-def run_backfill(
-    stock_list: list[str] = STOCK_LIST,
-    months: int = BACKFILL_MONTHS,
-) -> dict[str, int]:
-    """
-    對所有股票執行歷史回填，每支存成獨立 JSON 檔。
-    回傳 {symbol: 筆數} 的統計摘要。
-    """
-    start, end = calc_date_range(months)
-    logger.info(f"回填區間: {start} ～ {end}，共 {len(stock_list)} 支股票")
-
-    summary: dict[str, int] = {}
-    failed: list[str] = []
-
-    for i, symbol in enumerate(stock_list, 1):
-        logger.info(f"[{i}/{len(stock_list)}] 抓取 {symbol}...")
-
-        records = fetch_single_stock(symbol, start, end)
-
-        if records:
-            # 每支股票存一個獨立 JSON（symbol 中的 . 換成 _）
-            safe_name = symbol.replace(".", "_")
-            filepath  = save_json(records, RAW_DIR, gcs_source="yahoo", gcs_extra_path=f"symbol={safe_name}")
-            summary[symbol] = len(records)
-            logger.info(f"  ✓ {symbol}: {len(records)} 筆 → {filepath.name}")
-        else:
-            failed.append(symbol)
-            summary[symbol] = 0
-            logger.warning(f"  ✗ {symbol}: 抓取失敗，已跳過")
-
-        # 避免被 rate limit
-        if i < len(stock_list):
-            time.sleep(SLEEP_BETWEEN_REQUESTS)
-
-    # 輸出摘要
-    logger.info("=== 回填完成摘要 ===")
-    total_records = sum(summary.values())
-    logger.info(f"成功: {len(stock_list) - len(failed)} 支，失敗: {len(failed)} 支")
-    logger.info(f"總計 {total_records} 筆交易日資料")
-    if failed:
-        logger.warning(f"失敗清單: {failed}")
-
-    return summary
-
+# if __name__ == "__main__":
+#     # 先只測單一股票、單一天,驗證核心函式邏輯正確
+#     result = fetch_yahoo_history(
+#         stock_id="2330",
+#         market="TWSE",
+#         start_date=date(2026, 7, 8),
+#         end_date=date(2026, 7, 8),
+#     )
+#     if result:
+#         print("\n=== 結果 ===")
+#         for row in result:
+#             print(row)
 
 if __name__ == "__main__":
-    logger.info("=== Yahoo Finance 歷史資料回填開始 ===")
-    summary = run_backfill()
+    test_stocks = [
+        {"stock_id": "2330", "market": "TWSE"},
+        {"stock_id": "1240", "market": "TPEx"},
+        {"stock_id": "0000", "market": "TWSE"},  # 故意放一個不存在的代號,測試失敗處理
+    ]
 
-    # 印出每支股票的資料筆數
-    print("\n=== 各股票回填筆數 ===")
-    for symbol, count in summary.items():
-        status = "✓" if count > 0 else "✗"
-        print(f"  {status} {symbol}: {count} 筆")
+    result = fetch_batch(
+        stock_list=test_stocks,
+        start_date=date(2026, 7, 8),
+        end_date=date(2026, 7, 8),
+        delay_seconds=1.5,
+    )
+
+    save_failed_list(result["failed"])

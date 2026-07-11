@@ -1,106 +1,132 @@
 """
-TWSE OpenAPI — 每日全市場快照
-API: https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
+TWSE 每日全市場收盤行情爬蟲
 
-用途:
-  - 每個交易日收盤後（約 15:30 後）抓當日全市場收盤行情
-  - 回傳「最新一個交易日」的所有上市個股，無法指定日期
-  - 每日由 Airflow DAG 觸發，累積後形成歷史資料
+資料源: MI_INDEX (支援指定日期,可用於歷史回補與每日例行抓取)
+表格: tables[8] 「每日收盤行情(全部...)」
 
-執行方式（本地測試）:
-  python scrapers/twse_client.py
+設計原則:
+  - 只負責「忠實取得原始資料」,不做任何欄位清洗或型態轉換
+  - HTML tag、千分位逗號等清理邏輯留給階段三 Spark 處理
 """
 
 import sys
-import time
-import requests
-import pandas as pd
+import json
+from datetime import date
 from pathlib import Path
 
-# 讓 scrapers/ 以外也能 import utils
-sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_DIR, today_str
+import requests
 
-logger = get_logger("twse_client")
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from shared.utils import get_gcs_client, write_raw_json
 
-TWSE_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+TWSE_URL = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
+DAILY_QUOTES_TABLE_INDEX = 8  # 「每日收盤行情(全部...)」在 tables 陣列中的位置
 
-# 只關注的股票代號（空白 = 全部）
-# 若要縮小規模可填入: ["2330", "2317", "2454", "2881", "0050"]
-WATCH_LIST: list[str] = []
+# 目前已知、驗證過的欄位定義。之後若 TWSE 調整欄位,這裡是唯一需要更新的地方,
+# 下游 Spark schema (階段 3.2) 也應該以這份定義為準。
+EXPECTED_FIELDS = [
+    "證券代號", "證券名稱", "成交股數", "成交筆數", "成交金額",
+    "開盤價", "最高價", "最低價", "收盤價", "漲跌(+/-)", "漲跌價差",
+    "最後揭示買價", "最後揭示買量", "最後揭示賣價", "最後揭示賣量", "本益比",
+]
 
-
-def fetch_daily_quotes(retries: int = 3) -> list[dict]:
+def validate_fields(actual_fields: list[str]) -> bool:
     """
-    抓取最新交易日全市場收盤行情。
-    遇到非交易日或 API 暫時無資料時回傳空 list（不拋錯，讓 Airflow 不觸發失敗）。
+    比對實際抓到的欄位跟預期定義是否一致。
+    回傳 False 但不拋例外——讓呼叫端決定要繼續存檔(附警告)還是中止。
     """
-    for attempt in range(1, retries + 1):
-        try:
-            logger.info(f"呼叫 TWSE API（第 {attempt} 次）...")
-            resp = requests.get(TWSE_URL, timeout=30)
-            resp.raise_for_status()
-            data: list[dict] = resp.json()
+    if actual_fields != EXPECTED_FIELDS:
+        print("⚠️ 警告:TWSE 回傳的欄位結構與預期不同!")
+        print(f"   預期: {EXPECTED_FIELDS}")
+        print(f"   實際: {actual_fields}")
 
-            if not data:
-                logger.warning("TWSE API 回傳空資料，可能是非交易日或盤中時段。")
-                return []
-
-            logger.info(f"成功取得 {len(data)} 筆資料")
-            return data
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"第 {attempt} 次請求失敗: {e}")
-            if attempt < retries:
-                time.sleep(5)
-
-    logger.error("已達最大重試次數，放棄本次抓取。")
-    return []
+        missing = set(EXPECTED_FIELDS) - set(actual_fields)
+        extra = set(actual_fields) - set(EXPECTED_FIELDS)
+        if missing:
+            print(f"   缺少欄位: {missing}")
+        if extra:
+            print(f"   新增欄位: {extra}")
+        return False
+    return True
 
 
-def filter_watch_list(data: list[dict]) -> list[dict]:
-    """若有設定 WATCH_LIST，只保留指定股票"""
-    if not WATCH_LIST:
-        return data
-    return [row for row in data if row.get("Code") in WATCH_LIST]
-
-
-def validate_and_tag(data: list[dict]) -> list[dict]:
+def fetch_daily_quotes(target_date: date) -> dict | None:
     """
-    加上 pipeline metadata：
-    - fetched_date: 本腳本執行的日期（≠ 交易日，但可用來追蹤資料新鮮度）
-    - source: 來源標記
+    抓取指定日期的全市場個股收盤行情原始資料(未清洗)。
+
+    回傳: 每一列是一支股票的原始資料(list of str),對應 fields 定義的 16 個欄位。
+          非交易日或抓取失敗時回傳 None(不拋例外,讓呼叫端決定如何處理)。
+
+    回傳格式(自帶欄位說明,不再是純陣列):
+        {
+            "fields": [...],   # 當次抓取時,TWSE 實際回傳的欄位順序與名稱
+            "data": [[...], ...],
+            "fields_match_expected": true/false  # 供下游快速判斷是否需要特別檢查
+        }
     """
-    today = today_str()
-    for row in data:
-        row["_fetched_date"] = today
-        row["_source"] = "twse_openapi"
-    return data
+    date_str = target_date.strftime("%Y%m%d")
+    params = {
+        "response": "json",
+        "date": date_str,
+        "type": "ALLBUT0999", # 全部股票（不含權證 - 權證檔數通常是普通股的 10 倍以上，容易導致 API 回傳過久或記憶體耗盡。）
+    }
+    headers = {"User-Agent": "Mozilla/5.0"}
 
+    resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
+    resp.raise_for_status()
+    payload = resp.json()
 
-def run() -> Path | None:
-    raw_data = fetch_daily_quotes()
-    if not raw_data:
+    if payload.get("stat") != "OK":
+        print(f"⚠️ {date_str} 非交易日或無資料,stat={payload.get('stat')}")
         return None
 
-    filtered = filter_watch_list(raw_data)
-    tagged   = validate_and_tag(filtered)
+    tables = payload.get("tables", [])
+    if len(tables) <= DAILY_QUOTES_TABLE_INDEX:
+        print(f"⚠️ {date_str} tables 結構異常,只有 {len(tables)} 張表")
+        return None
 
-    # 印出前 3 筆讓使用者確認欄位
-    logger.info("=== 範例資料（前 3 筆）===")
-    for row in tagged[:3]:
-        print(row)
+     
+    target_table = tables[DAILY_QUOTES_TABLE_INDEX]
+    actual_fields = target_table.get("fields", [])
+    rows = target_table.get("data", [])
 
-    # 確認欄位
-    df = pd.DataFrame(tagged)
-    logger.info(f"欄位清單: {list(df.columns)}")
-    logger.info(f"資料筆數: {len(df)}")
+    fields_ok = validate_fields(actual_fields)
+    print(f"✅ {date_str} 取得 {len(rows)} 筆個股資料(欄位結構{'正常' if fields_ok else '⚠️ 已變動,見上方警告'})")
 
-    # 儲存
-    filepath = save_json(tagged, RAW_DIR, gcs_source="twse")
-    logger.info(f"已儲存至 {filepath}")
-    return filepath
+    return {
+        "fields": actual_fields,
+        "data": rows,
+        "fields_match_expected": fields_ok,
+    }
 
 
 if __name__ == "__main__":
-    run()
+    target_date = date(2026, 7, 8)
+    result  = fetch_daily_quotes(target_date)
+
+    if result :
+        print("\n=== 前 2 筆原始資料(未清洗)===")
+        for row in result["data"][:2]:
+            print(row)
+
+        # 存到本地檔案先驗證,還不上傳 GCS
+        # import json
+        # Path("local_output").mkdir(exist_ok=True)
+        # with open("local_output/twse_daily_2026-07-08.json", "w", encoding="utf-8") as f:
+        #     json.dump(result, f, ensure_ascii=False, indent=2)
+        # print("\n✅ 已存到 local_output/twse_daily_2026-07-08.json")
+
+        # 寫入 GCS Raw Layer(冪等覆蓋)
+        BUCKET_NAME = "stock-pulse-data-lake"  # 改成你的 bucket 名稱
+        client = get_gcs_client()
+
+        content = json.dumps(result, ensure_ascii=False)
+        write_raw_json(
+            client=client,
+            bucket_name=BUCKET_NAME,
+            source_name="twse_daily",
+            target_date=target_date,
+            content=content,
+        )
+    else:
+        print("⚠️ 無資料可寫入,略過此次上傳")
