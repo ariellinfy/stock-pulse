@@ -11,6 +11,7 @@ TWSE 每日全市場收盤行情爬蟲
 
 import sys
 import json
+import time
 import requests
 from datetime import date
 from pathlib import Path
@@ -20,6 +21,10 @@ from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 TWSE_URL = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 DAILY_QUOTES_TABLE_INDEX = 8  # 「每日收盤行情(全部...)」在 tables 陣列中的位置
+
+# 基於歷史觀察,正常交易日應有 1300+ 檔(含 ETF/特別股等),
+# 若筆數明顯偏低(低於此比例),視為擷取不完整,不寫入,讓斷點續跑機制之後重新嘗試
+MIN_ROWS_RATIO_OF_RECENT_AVERAGE = 0.85
 
 # 目前已知、驗證過的欄位定義。之後若 TWSE 調整欄位,這裡是唯一需要更新的地方,
 # 下游 Spark schema (階段 3.2) 也應該以這份定義為準。
@@ -49,7 +54,7 @@ def validate_fields(actual_fields: list[str]) -> bool:
     return True
 
 
-def fetch_daily_quotes(target_date: date) -> dict | None:
+def fetch_daily_quotes(target_date: date, max_retries: int = 3, no_data_confirm_attempts: int = 2) -> dict | None:
     """
     抓取指定日期的全市場個股收盤行情原始資料(未清洗)。
 
@@ -62,45 +67,79 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
             "data": [[...], ...],
             "fields_match_expected": true/false  # 供下游快速判斷是否需要特別檢查
         }
+
+    回傳三種狀態,呼叫端要分別處理:
+      - dict: 成功取得資料
+      - "NO_TRADING_DAY": 連續 no_data_confirm_attempts 次都確認 TWSE 明確回應無資料,
+                           可放心視為非交易日,標記起來避免未來重複請求
+      - None: 請求本身失敗(網路錯誤/403等),無法判斷當天狀態,不應標記,需要之後重試
     """
     date_str = target_date.strftime("%Y%m%d")
-    params = {
-        "response": "json",
-        "date": date_str,
-        "type": "ALLBUT0999", # 全部股票（不含權證 - 權證檔數通常是普通股的 10 倍以上，容易導致 API 回傳過久或記憶體耗盡。）
-    }
+    params = {"response": "json", "date": date_str, "type": "ALLBUT0999"}
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
-    resp.raise_for_status()
-    payload = resp.json()
+    no_data_confirmations = 0
 
-    if payload.get("stat") != "OK":
-        print(f"⚠️ {date_str} 非交易日或無資料,stat={payload.get('stat')}")
-        return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if resp.status_code == 403:
+                wait_time = 10 * attempt
+                print(f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"❌ {date_str} 請求失敗(非 403): {e}")
+                return None  # 不確定狀態,不標記,交由之後重試
+        except requests.exceptions.RequestException as e:
+            print(f"❌ {date_str} 網路錯誤: {e}")
+            return None  # 同樣不確定狀態,不標記
 
-    tables = payload.get("tables", [])
-    if len(tables) <= DAILY_QUOTES_TABLE_INDEX:
-        print(f"⚠️ {date_str} tables 結構異常,只有 {len(tables)} 張表")
-        return None
+        payload = resp.json()
 
-     
-    target_table = tables[DAILY_QUOTES_TABLE_INDEX]
-    actual_fields = target_table.get("fields", [])
-    rows = target_table.get("data", [])
+        if payload.get("stat") != "OK":
+            no_data_confirmations += 1
+            print(f"ℹ️ {date_str} 第 {no_data_confirmations} 次確認無交易資料(stat={payload.get('stat')})")
 
-    fields_ok = validate_fields(actual_fields)
-    print(f"✅ {date_str} 取得 {len(rows)} 筆個股資料(欄位結構{'正常' if fields_ok else '⚠️ 已變動,見上方警告'})")
+            if no_data_confirmations >= no_data_confirm_attempts:
+                print(f"✅ {date_str} 已連續 {no_data_confirm_attempts} 次確認,判定為非交易日")
+                return "NO_TRADING_DAY"
 
-    return {
-        "fields": actual_fields,
-        "data": rows,
-        "fields_match_expected": fields_ok,
-    }
+            time.sleep(2)  # 兩次確認之間稍微間隔,避免瞬間重複打到同一個暫時性問題
+            continue
+
+        # stat == OK,成功取得資料,走原本既有的邏輯(欄位驗證、回傳 dict)
+        tables = payload.get("tables", [])
+        if len(tables) <= DAILY_QUOTES_TABLE_INDEX:
+            print(f"⚠️ {date_str} tables 結構異常,只有 {len(tables)} 張表")
+            return None
+
+        target_table = tables[DAILY_QUOTES_TABLE_INDEX]
+        actual_fields = target_table.get("fields", [])
+        rows = target_table.get("data", [])
+
+        min_expected = int(1300 * 0.85)
+        if len(rows) < min_expected:
+            print(f"⚠️ {date_str} 只取得 {len(rows)} 筆,低於門檻 {min_expected},判定為擷取不完整")
+            return None
+
+        fields_ok = validate_fields(actual_fields)
+        print(f"✅ {date_str} 取得 {len(rows)} 筆個股資料")
+
+        return {
+            "fields": actual_fields,
+            "data": rows,
+            "fields_match_expected": fields_ok,
+        }
+
+    print(f"❌ {date_str} 重試 {max_retries} 次後仍無法取得明確結果,略過")
+    return None
 
 
 if __name__ == "__main__":
-    target_date = date(2026, 7, 8)
+    target_date = date(2025, 12, 17)
     result  = fetch_daily_quotes(target_date)
 
     if result :
@@ -109,22 +148,21 @@ if __name__ == "__main__":
             print(row)
 
         # 存到本地檔案先驗證,還不上傳 GCS
-        # import json
         # Path("local_output").mkdir(exist_ok=True)
-        # with open("local_output/twse_daily_2026-07-08.json", "w", encoding="utf-8") as f:
+        # with open("local_output/twse_daily_2025-12-17.json", "w", encoding="utf-8") as f:
         #     json.dump(result, f, ensure_ascii=False, indent=2)
-        # print("\n✅ 已存到 local_output/twse_daily_2026-07-08.json")
+        # print("\n✅ 已存到 local_output/twse_daily_2025-12-17.json")
 
         # 寫入 GCS Raw Layer(冪等覆蓋)
-        client = get_gcs_client()
+        # client = get_gcs_client()
 
-        content = json.dumps(result, ensure_ascii=False)
-        write_raw_json(
-            client=client,
-            bucket_name=BUCKET_NAME,
-            source_name="twse_daily",
-            target_date=target_date,
-            content=content,
-        )
+        # content = json.dumps(result, ensure_ascii=False)
+        # write_raw_json(
+        #     client=client,
+        #     bucket_name=BUCKET_NAME,
+        #     source_name="twse_daily",
+        #     target_date=target_date,
+        #     content=content,
+        # )
     else:
         print("⚠️ 無資料可寫入,略過此次上傳")
