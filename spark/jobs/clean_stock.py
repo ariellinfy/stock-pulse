@@ -8,7 +8,7 @@ TWSE + TPEx 股市資料清洗與合併邏輯
 """
 
 from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType, LongType
+from pyspark.sql.types import StringType, DoubleType, LongType
 
 
 def add_trade_date(df, trade_date: str):
@@ -22,6 +22,15 @@ def add_trade_date(df, trade_date: str):
 def safe_cast_numeric(col_name: str, target_type):
     cleaned = F.trim(F.regexp_replace(F.col(col_name), ",", ""))
     return F.when(cleaned.rlike(r"^[+-]?\d+\.?\d*$"), cleaned.cast(target_type)).otherwise(F.lit(None).cast(target_type))
+
+
+def filter_official_stocks(df, official_stock_ids: list[str]):
+    """
+    用官方產業分類清單過濾,只保留真正的股票(排除權證/可轉債/特殊 ETF 等)。
+    這是我們在探索階段驗證過的關鍵步驟:10,093 筆 TPEx 原始資料中,
+    只有約 889 筆是官方認證的真實股票。
+    """
+    return df.filter(F.col("stock_id").isin(official_stock_ids))
 
 
 def clean_twse(df):
@@ -52,8 +61,22 @@ def clean_twse(df):
     return df
 
 
+def unify_twse(df):
+    return df.select(
+        F.col("dt"),
+        F.col("stock_id"), F.col("stock_name"), F.lit("TWSE").alias("market"),
+        F.col("open_price"), F.col("high_price"), F.col("low_price"), F.col("close_price"),
+        F.lit(None).cast(DoubleType()).alias("average_price"),
+        F.col("trade_volume"), F.col("trade_value"), F.col("transaction_count"),
+        F.col("signed_change_amount").alias("change_amount"),
+        F.col("last_bid_price"), F.col("last_bid_volume"),
+        F.col("last_ask_price"), F.col("last_ask_volume"),
+        F.col("pe_ratio"),
+        F.lit(None).cast(LongType()).alias("issued_shares"),
+    )
+
+    
 def clean_tpex(df):
-    # (把之前在 explore_read_tpex_raw.py 驗證過的內容整個搬過來)
     numeric_cols_long = ["trade_volume", "transaction_count", "trade_value",
                           "last_bid_volume", "last_ask_volume", "issued_shares"]
     numeric_cols_double = ["close_price", "open_price", "high_price", "low_price",
@@ -69,22 +92,9 @@ def clean_tpex(df):
     return df
 
 
-def unify_twse(df):
-    return df.select(
-        F.col("stock_id"), F.col("stock_name"), F.lit("TWSE").alias("market"),
-        F.col("open_price"), F.col("high_price"), F.col("low_price"), F.col("close_price"),
-        F.lit(None).cast(DoubleType()).alias("average_price"),
-        F.col("trade_volume"), F.col("trade_value"), F.col("transaction_count"),
-        F.col("signed_change_amount").alias("change_amount"),
-        F.col("last_bid_price"), F.col("last_bid_volume"),
-        F.col("last_ask_price"), F.col("last_ask_volume"),
-        F.col("pe_ratio"),
-        F.lit(None).cast(LongType()).alias("issued_shares"),
-    )
-
-
 def unify_tpex(df):
     return df.select(
+        F.col("dt"),
         F.col("stock_id"), F.col("stock_name"), F.lit("TPEx").alias("market"),
         F.col("open_price"), F.col("high_price"), F.col("low_price"), F.col("close_price"),
         F.col("average_price"),
@@ -95,16 +105,48 @@ def unify_tpex(df):
         F.lit(None).cast(DoubleType()).alias("pe_ratio"),
         F.col("issued_shares"),
     )
+    
 
-
-def filter_official_stocks(df, official_stock_ids: list[str]):
+def clean_yahoo_history(df):
     """
-    用官方產業分類清單過濾,只保留真正的股票(排除權證/可轉債/特殊 ETF 等)。
-    這是我們在探索階段驗證過的關鍵步驟:10,093 筆 TPEx 原始資料中,
-    只有約 889 筆是官方認證的真實股票。
+    清洗 Yahoo Finance 歷史資料。
+    已知現象: yfinance 回傳還原權息調整後價格,運算會產生長串浮點數精度,
+              round 到 2 位小數對齊官方資料精度慣例。
     """
-    return df.filter(F.col("stock_id").isin(official_stock_ids))
+    df = df.withColumn("open", F.round(F.col("open"), 2))
+    df = df.withColumn("high", F.round(F.col("high"), 2))
+    df = df.withColumn("low", F.round(F.col("low"), 2))
+    df = df.withColumn("close", F.round(F.col("close"), 2))
+    return df
 
+
+def unify_yahoo_tpex(df):
+    """
+    把清洗後的 Yahoo TPEx 歷史資料,對齊到統一 schema。
+    Yahoo 沒有的欄位(transaction_count, pe_ratio 等)一律補 null。
+    """
+    return df.select(
+        F.col("trade_date").alias("dt"),
+        F.col("stock_id").cast(StringType()),
+        F.lit(None).cast(StringType()).alias("stock_name"),
+        F.col("market"),
+        F.col("open").alias("open_price"),
+        F.col("high").alias("high_price"),
+        F.col("low").alias("low_price"),
+        F.col("close").alias("close_price"),
+        F.lit(None).cast(DoubleType()).alias("average_price"),
+        F.col("volume").alias("trade_volume"),
+        F.lit(None).cast(LongType()).alias("trade_value"),
+        F.lit(None).cast(LongType()).alias("transaction_count"),
+        F.lit(None).cast(DoubleType()).alias("change_amount"),
+        F.lit(None).cast(DoubleType()).alias("last_bid_price"),
+        F.lit(None).cast(LongType()).alias("last_bid_volume"),
+        F.lit(None).cast(DoubleType()).alias("last_ask_price"),
+        F.lit(None).cast(LongType()).alias("last_ask_volume"),
+        F.lit(None).cast(DoubleType()).alias("pe_ratio"),
+        F.lit(None).cast(LongType()).alias("issued_shares"),
+    )
+    
 
 def merge_markets(twse_df, tpex_df, twse_official_ids: list[str], tpex_official_ids: list[str]):
     """
