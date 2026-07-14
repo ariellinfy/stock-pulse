@@ -22,9 +22,14 @@ BUCKET_NAME: str = get_required_env("GCP_BUCKET_NAME")
 SA_KEY_PATH: str = os.environ.get("GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
 
 
-def get_gcs_client(key_path: str = "secrets/gcp-sa-key.json") -> storage.Client:
-    """回傳一個已認證的 GCS client。"""
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+def get_gcs_client(key_path: str | None = None) -> storage.Client:
+    """
+    回傳一個已認證的 GCS client。
+    key_path 優先順序: 明確傳入的參數 > 環境變數 GCP_SA_KEY_PATH > 預設相對路徑
+    (相對路徑僅為向下相容本機開發習慣,不建議在容器/正式環境依賴它)
+    """
+    resolved_path = key_path or os.environ.get("GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = resolved_path
     return storage.Client()
 
 
