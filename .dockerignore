@@ -1,0 +1,8 @@
+secrets/
+.env
+.venv/
+.git/
+local_output/
+spark/_exploration_archive/
+*.pyc
+__pycache__/
