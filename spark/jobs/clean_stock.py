@@ -146,7 +146,29 @@ def unify_yahoo_tpex(df):
         F.lit(None).cast(DoubleType()).alias("pe_ratio"),
         F.lit(None).cast(LongType()).alias("issued_shares"),
     )
-    
+
+
+def clean_fear_greed_history(df):
+    """
+    清洗 Fear & Greed 歷史資料。
+    - 時間戳(毫秒)轉換成日期字串,對齊其他資料源的 dt 分區格式
+    - 去除重複日期(已知現象: 歷史數列最後一筆常與即時值時間戳重疊)
+    """
+    df = df.withColumn(
+        "dt",
+        F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
+    )
+    df = df.withColumnRenamed("y", "score")
+    df = df.withColumnRenamed("rating", "fear_greed_rating")
+    df = df.dropDuplicates(["dt"])  # 同一天多筆時,保留其中一筆(去重優先於精確選擇,先求資料不重複)
+    df = df.select("dt", "score", "fear_greed_rating")
+    return df
+
+
+def unify_fear_greed(df):
+    """對齊到獨立的 fear_greed 事實表 schema(不併入 stock_daily,因為它不是個股層級資料)。"""
+    return df.select("dt", "score", "fear_greed_rating")
+
 
 def merge_markets(twse_df, tpex_df, twse_official_ids: list[str], tpex_official_ids: list[str]):
     """

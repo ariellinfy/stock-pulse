@@ -12,7 +12,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import BUCKET_NAME
+from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
 from spark.common.schemas import TWSE_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
 from spark.jobs.clean_stock import clean_twse, clean_yahoo_history, unify_twse, unify_yahoo_tpex, filter_official_stocks
@@ -78,13 +78,35 @@ def backfill_all_markets(spark, bucket_name: str, twse_official_ids: list[str]):
     print(f"✅ 全市場歷史已寫出至 {output_path}")
 
 
-if __name__ == "__main__":
-    spark = build_spark_session("stock-pulse-backfill-clean-twse")
+def backfill_fear_greed(spark, bucket_name: str):
+    raw_path = f"gs://{bucket_name}/raw/fear_greed_history/range=full/data.json"
+    fg_raw = spark.read.option("multiline", "true").json(raw_path)
 
-    import json
-    with open("local_output/industry_list_twse.json", "r", encoding="utf-8") as f:
-        twse_official_ids = [r["公司代號"] for r in json.load(f)]
+    fg_data = fg_raw.select(F.explode(F.col("fear_and_greed_historical.data")).alias("record"))
+    fg_flat = fg_data.select("record.x", "record.y", "record.rating")
+
+    cleaned = clean_fear_greed_history(fg_flat)
+
+    print(f"Fear & Greed 清洗後總筆數: {cleaned.count()}")
+
+    output_path = f"gs://{bucket_name}/clean/fear_greed_daily/"
+    (
+        cleaned
+        .write.mode("overwrite")
+        .partitionBy("dt")
+        .parquet(output_path)
+    )
+
+    print(f"✅ Fear & Greed 已寫出至 {output_path}")
+
+
+if __name__ == "__main__":
+    spark = build_spark_session("stock-pulse-backfill-clean-all")
+
+    twse_industry_records = load_industry_list_from_gcs(BUCKET_NAME, "TWSE")
+    twse_official_ids = [r["公司代號"] for r in twse_industry_records]
 
     backfill_all_markets(spark, BUCKET_NAME, twse_official_ids)
+    backfill_fear_greed(spark, BUCKET_NAME)
 
     spark.stop()

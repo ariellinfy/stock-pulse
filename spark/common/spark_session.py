@@ -14,52 +14,39 @@ def build_spark_session(app_name: str) -> SparkSession:
     """
     建立含 GCS Connector 設定的 SparkSession。
 
-    需要的環境變數:
-        SPARK_GCS_JAR_PATH: GCS connector JAR 檔案路徑
-        GCP_SA_KEY_PATH: GCP Service Account 金鑰路徑
+    環境變數:
+        SPARK_GCS_JAR_PATH: GCS connector JAR 路徑(選填)。
+            本機開發需要明確指定;若在已內建 GCS Connector 的容器環境
+            (JAR 已放在 /opt/spark/jars/)執行,可以不設定此變數。
+        GCP_SA_KEY_PATH: GCP Service Account 金鑰路徑(必填)
     """
-    gcs_jar_path = os.environ.get("SPARK_GCS_JAR_PATH")
+    gcs_jar_path = os.environ.get("SPARK_GCS_JAR_PATH")  # 選填,不再強制檢查
     gcp_key_path = os.environ.get("GCP_SA_KEY_PATH")
 
-    if not gcs_jar_path or not gcp_key_path:
+    if not gcp_key_path:
         raise RuntimeError(
-            "缺少必要環境變數 SPARK_GCS_JAR_PATH 或 GCP_SA_KEY_PATH,"
-            "請確認 .env 檔案已正確設定並載入"
+            "缺少必要環境變數 GCP_SA_KEY_PATH,請確認 .env 檔案已正確設定並載入"
         )
 
-    spark = (
+    builder = (
         SparkSession.builder
         .appName(app_name)
         .master("local[*]")
-        # ==========================================
-        # 1. 資源與效能優化
-        # ==========================================
-        .config("spark.driver.memory", "2g") 
-        # WSL/Docker 資源有限，限制 Driver 記憶體避免 OutOfMemoryError 導致系統崩潰。
-
+        .config("spark.driver.memory", "2g")
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
-        
-        .config("spark.sql.shuffle.partitions", "4") 
-        # 絕對必要的設定！預設 200 會在 Join 或 GroupBy 時產生 200 個小檔案，對於幾 MB 的股市資料來說，光是協調 Task 就會拖慢幾十倍速度。
-        
+        .config("spark.sql.shuffle.partitions", "4")
         .config("spark.sql.parquet.compression.codec", "snappy")
-        # 寫入 GCS Clean Layer 時的預設壓縮格式，讀寫平衡最佳。
-        
-        # ==========================================
-        # 2. 業務邏輯設定
-        # ==========================================
         .config("spark.sql.session.timeZone", "Asia/Taipei")
-        # 處理股票交易日與新聞發布時間時，統一使用台北時區，避免因為 UTC 時差導致 Join 錯位。
-
-        # ==========================================
-        # 3. GCS 連線
-        # ==========================================
-        .config("spark.jars", gcs_jar_path)
         .config("spark.hadoop.google.cloud.auth.service.account.enable", "true")
         .config("spark.hadoop.google.cloud.auth.service.account.json.keyfile", gcp_key_path)
         .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
-        .getOrCreate()
     )
 
+    # 只有明確提供 JAR 路徑時才加這個設定(本機開發情境);
+    # 容器環境已內建 GCS Connector 在 /opt/spark/jars/,不需要此設定
+    if gcs_jar_path:
+        builder = builder.config("spark.jars", gcs_jar_path)
+
+    spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     return spark

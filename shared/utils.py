@@ -1,4 +1,5 @@
 import os
+import json
 from google.cloud import storage
 from datetime import date
 from typing import Tuple
@@ -123,3 +124,22 @@ def normalize_stock_id(raw_id: str) -> Tuple[str, str]:
         #  之後寫爬蟲時,market 會由呼叫端根據「這支爬蟲抓的是哪個 API」直接指定,
         #  而不是依賴這個函式去猜)
         return raw_id, "UNKNOWN"
+
+
+def load_industry_list_from_gcs(bucket_name: str, market: str) -> list[dict]:
+    """
+    直接從 GCS 讀取最新一份產業分類清單,取代依賴本機 local_output/ 檔案的做法。
+    容器環境沒有本機探索階段留下的檔案,必須直接讀權威來源。
+    """
+
+    client = get_gcs_client()
+    bucket = client.bucket(bucket_name)
+    prefix = f"raw/industry_list_{market.lower()}/"
+    blobs = list(bucket.list_blobs(prefix=prefix))
+
+    if not blobs:
+        raise RuntimeError(f"找不到 {prefix} 底下的任何資料")
+
+    latest_blob = sorted(blobs, key=lambda b: b.name)[-1]
+    content = json.loads(latest_blob.download_as_text())
+    return content

@@ -7,7 +7,7 @@ TWSE/TPEx 原始資料的明確 schema 定義。
     不要在讀取這一步就嘗試自動轉數字型態(容易因為逗號、HTML tag 而失敗或出錯)。
 """
 
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StructType, StructField, DoubleType, StringType, LongType
 
 
 # 在 spark/common/schemas.py 裡,幫每個 schema 附上「預期的原始中文欄位順序」,
@@ -79,4 +79,11 @@ TPEX_RAW_SCHEMA = StructType([
     StructField("next_day_reference_price", StringType(), nullable=True),  # TWSE 沒有
     StructField("next_day_limit_up", StringType(), nullable=True),    # TWSE 沒有
     StructField("next_day_limit_down", StringType(), nullable=True),  # TWSE 沒有
+])
+
+
+FEAR_GREED_SCHEMA = StructType([
+    StructField("x", DoubleType(), nullable=False),   # Unix 毫秒時間戳(浮點數)
+    StructField("y", DoubleType(), nullable=True),    # 指數分數
+    StructField("rating", StringType(), nullable=True),  # 文字評級(fear/neutral/greed 等)
 ])
