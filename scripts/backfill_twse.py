@@ -85,16 +85,17 @@ def backfill_twse(start: date, end: date):
     print(f"\n=== 回補完成 ===")
     print(f"成功: {succeeded} / 跳過(已存在): {skipped} / 確認非交易日: {no_trading} / 待重試: {failed}")
 
-    
 
 if __name__ == "__main__":
-    # 先用小範圍測試(5 天),確認流程正確再擴大
-    # backfill_twse(
-    #     start=date(2026, 7, 1),
-    #     end=date(2026, 7, 8),
-    # )
+    import argparse
+    from datetime import datetime
 
-    backfill_twse(
-        start=date(2025, 12, 1),   # 往回抓約 2 年,確保涵蓋 500+ 個交易日,含 MA200 暖機空間
-        end=date(2026, 7, 10),     # 到目前為止(不含已經在小規模測試時抓過的 7/11,那天等每日排程處理)
-    )
+    parser = argparse.ArgumentParser(description="TWSE 歷史資料回補")
+    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
+    args = parser.parse_args()
+
+    start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(args.end_date, "%Y-%m-%d").date()
+
+    backfill_twse(start=start, end=end)

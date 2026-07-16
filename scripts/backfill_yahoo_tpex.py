@@ -85,35 +85,49 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
             json.dump(failed, f, ensure_ascii=False, indent=2)
 
 
-if __name__ == "__main__":
-    # 先只測試「讀取股票清單」這個環節,不觸發任何 Yahoo API 呼叫
-    # client = get_gcs_client()
-    # stock_ids = load_tpex_stock_list(client, BUCKET_NAME)
+# if __name__ == "__main__":
+#     # 先只測試「讀取股票清單」這個環節,不觸發任何 Yahoo API 呼叫
+#     # client = get_gcs_client()
+#     # stock_ids = load_tpex_stock_list(client, BUCKET_NAME)
 
-    # print(f"\n前 5 個代號: {stock_ids[:5]}")
-    # print(f"總數: {len(stock_ids)}")
-    # print(f"是否有重複代號: {len(stock_ids) != len(set(stock_ids))}")
-    # print(f"是否有非字串型態: {any(not isinstance(s, str) for s in stock_ids)}")
+#     # print(f"\n前 5 個代號: {stock_ids[:5]}")
+#     # print(f"總數: {len(stock_ids)}")
+#     # print(f"是否有重複代號: {len(stock_ids) != len(set(stock_ids))}")
+#     # print(f"是否有非字串型態: {any(not isinstance(s, str) for s in stock_ids)}")
     
-    # 先用小規模測試:只抓近 10 天,而且先手動抽 3 檔測試,不要一開始就跑全部 891 檔
-    # (下面這行先註解掉全市場清單讀取,直接手動指定測試名單)
-    test_run = False
+#     # 先用小規模測試:只抓近 10 天,而且先手動抽 3 檔測試,不要一開始就跑全部 891 檔
+#     # (下面這行先註解掉全市場清單讀取,直接手動指定測試名單)
+#     test_run = False
 
-    if test_run:
-        from datetime import timedelta
-        client = get_gcs_client()
-        test_stocks = ["1240", "6488"]  # 手動挑 2 檔,不透過完整清單
-        start = date.today() - timedelta(days=10)
-        end = date.today()
+#     if test_run:
+#         from datetime import timedelta
+#         client = get_gcs_client()
+#         test_stocks = ["1240", "6488"]  # 手動挑 2 檔,不透過完整清單
+#         start = date.today() - timedelta(days=10)
+#         end = date.today()
 
-        for stock_id in test_stocks:
-            result = fetch_yahoo_history(stock_id, "TPEx", start, end)
-            if result:
-                content = json.dumps(result, ensure_ascii=False)
-                write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id, content)
-            time.sleep(1.5)
-    else:
-        backfill_yahoo_tpex(
-            start_date=date(2024, 7, 1),
-            end_date=date(2026, 7, 10),
-        )
+#         for stock_id in test_stocks:
+#             result = fetch_yahoo_history(stock_id, "TPEx", start, end)
+#             if result:
+#                 content = json.dumps(result, ensure_ascii=False)
+#                 write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id, content)
+#             time.sleep(1.5)
+#     else:
+#         backfill_yahoo_tpex(
+#             start_date=date(2024, 7, 1),
+#             end_date=date(2026, 7, 10),
+#         )
+
+if __name__ == "__main__":
+    import argparse
+    from datetime import datetime
+
+    parser = argparse.ArgumentParser(description="TPEx 歷史資料回補(透過 Yahoo Finance)")
+    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
+    args = parser.parse_args()
+
+    start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(args.end_date, "%Y-%m-%d").date()
+
+    backfill_yahoo_tpex(start_date=start, end_date=end)
