@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent))
-from utils import get_logger, save_json, RAW_DIR, ts_str, today_str
+from scrapers._exploration_archive.utils import get_logger, save_json, RAW_DIR, ts_str, today_str
 
 logger = get_logger("news_client")
 

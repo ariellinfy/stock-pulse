@@ -90,24 +90,30 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
     }
 
 
-if __name__ == "__main__":
-    target_date = date(2026, 7, 9)
-    result = fetch_daily_quotes(target_date)
+# if __name__ == "__main__":
+#     target_date = date(2026, 7, 9)
+#     result  = fetch_daily_quotes(target_date)
 
-    if result:
-        print("\n=== 前 2 筆原始資料(未清洗)===")
-        for row in result["data"][:2]:
-            print(row)
+#     if result:
+#         print("\n=== 前 2 筆原始資料(未清洗)===")
+#         for row in result["data"][:2]:
+#             print(row)
 
-        client = get_gcs_client()
+#         # 存到本地檔案先驗證,還不上傳 GCS
+#         Path("local_output").mkdir(exist_ok=True)
+#         with open("local_output/tpex_daily_2026-07-09.json", "w", encoding="utf-8") as f:
+#             json.dump(result, f, ensure_ascii=False, indent=2)
+#         print("\n✅ 已存到 local_output/tpex_daily_2026-07-09.json")
 
-        content = json.dumps(result, ensure_ascii=False)
-        write_raw_json(
-            client=client,
-            bucket_name=BUCKET_NAME,
-            source_name="tpex_daily",
-            target_date=target_date,
-            content=content,
-        )
-    else:
-        print("⚠️ 無資料可寫入,略過此次上傳")
+#         client = get_gcs_client()
+
+#         content = json.dumps(result, ensure_ascii=False)
+#         write_raw_json(
+#             client=client,
+#             bucket_name=BUCKET_NAME,
+#             source_name="tpex_daily",
+#             target_date=target_date,
+#             content=content,
+#         )
+#     else:
+#         print("⚠️ 無資料可寫入,略過此次上傳")

@@ -52,21 +52,27 @@ def fetch_industry_list(market: str) -> list[dict] | None:
     return records
 
 
-if __name__ == "__main__":
-    client = get_gcs_client()
-    today = date.today()
+# if __name__ == "__main__":
+#     client = get_gcs_client()
+#     today = date.today()
 
-    for market in ("TWSE", "TPEx"):
-        records = fetch_industry_list(market)
-        if records:
-            print(f"\n=== {market} 前 1 筆範例 ===")
-            print(records[0])
+#     for market in ("TWSE", "TPEx"):
+#         records = fetch_industry_list(market)
+#         if records:
+#             print(f"\n=== {market} 前 1 筆範例 ===")
+#             print(records[0])
 
-            content = json.dumps(records, ensure_ascii=False)
-            write_raw_json(
-                client=client,
-                bucket_name=BUCKET_NAME,
-                source_name=f"industry_list_{market.lower()}",
-                target_date=today,
-                content=content,
-            )
+#             # 存到本地檔案先驗證,還不上傳 GCS
+#             Path("local_output").mkdir(exist_ok=True)
+#             with open(f"local_output/industry_list_{market.lower()}.json", "w", encoding="utf-8") as f:
+#                 json.dump(records, f, ensure_ascii=False)
+#             print(f"\n✅ 已存到 local_output/industry_list_{market.lower()}.json")
+        
+#             content = json.dumps(records, ensure_ascii=False)
+#             write_raw_json(
+#                 client=client,
+#                 bucket_name=BUCKET_NAME,
+#                 source_name=f"industry_list_{market.lower()}",
+#                 target_date=today,
+#                 content=content,
+#             )

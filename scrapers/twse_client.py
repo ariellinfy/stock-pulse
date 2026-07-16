@@ -138,31 +138,86 @@ def fetch_daily_quotes(target_date: date, max_retries: int = 3, no_data_confirm_
     return None
 
 
-if __name__ == "__main__":
-    target_date = date(2025, 12, 17)
-    result  = fetch_daily_quotes(target_date)
+def fetch_daily_quotes_no_permanent_mark(target_date: date, max_retries: int = 3) -> dict | None:
+    """
+    每日排程專用版本:不做「連續確認即永久標記非交易日」的判斷,
+    因為 TWSE API 無法從回應內容區分「非交易日」與「資料尚未彙整完成」,
+    兩者 stat 訊息完全相同(已實測驗證)。
+    查無資料時單純回傳 None,交由呼叫端決定如何處理(通常是任務失敗 + 之後重試)。
+    """
+    date_str = target_date.strftime("%Y%m%d")
+    params = {"response": "json", "date": date_str, "type": "ALLBUT0999"}
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-    if result :
-        print("\n=== 前 2 筆原始資料(未清洗)===")
-        for row in result["data"][:2]:
-            print(row)
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if resp.status_code == 403:
+                wait_time = 10 * attempt
+                print(f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            print(f"❌ {date_str} 請求失敗(非 403): {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"❌ {date_str} 網路錯誤: {e}")
+            return None
 
-        # 存到本地檔案先驗證,還不上傳 GCS
-        # Path("local_output").mkdir(exist_ok=True)
-        # with open("local_output/twse_daily_2025-12-17.json", "w", encoding="utf-8") as f:
-        #     json.dump(result, f, ensure_ascii=False, indent=2)
-        # print("\n✅ 已存到 local_output/twse_daily_2025-12-17.json")
+        payload = resp.json()
 
-        # 寫入 GCS Raw Layer(冪等覆蓋)
-        # client = get_gcs_client()
+        if payload.get("stat") != "OK":
+            print(f"ℹ️ {date_str} 目前查無資料(stat={payload.get('stat')}),可能是非交易日或資料尚未彙整")
+            return None  # 不永久標記,單純回傳 None
 
-        # content = json.dumps(result, ensure_ascii=False)
-        # write_raw_json(
-        #     client=client,
-        #     bucket_name=BUCKET_NAME,
-        #     source_name="twse_daily",
-        #     target_date=target_date,
-        #     content=content,
-        # )
-    else:
-        print("⚠️ 無資料可寫入,略過此次上傳")
+        tables = payload.get("tables", [])
+        if len(tables) <= DAILY_QUOTES_TABLE_INDEX:
+            print(f"⚠️ {date_str} tables 結構異常")
+            return None
+
+        target_table = tables[DAILY_QUOTES_TABLE_INDEX]
+        actual_fields = target_table.get("fields", [])
+        rows = target_table.get("data", [])
+
+        min_expected = int(1300 * 0.85)
+        if len(rows) < min_expected:
+            print(f"⚠️ {date_str} 只取得 {len(rows)} 筆,低於門檻,判定為擷取不完整")
+            return None
+
+        fields_ok = validate_fields(actual_fields)
+        print(f"✅ {date_str} 取得 {len(rows)} 筆個股資料")
+        return {"fields": actual_fields, "data": rows, "fields_match_expected": fields_ok}
+
+    print(f"❌ {date_str} 重試 {max_retries} 次後仍無法取得資料")
+    return None
+
+
+# if __name__ == "__main__":
+#     target_date = date(2025, 12, 17)
+#     result  = fetch_daily_quotes(target_date)
+
+#     if result :
+#         print("\n=== 前 2 筆原始資料(未清洗)===")
+#         for row in result["data"][:2]:
+#             print(row)
+
+#         存到本地檔案先驗證,還不上傳 GCS
+#         Path("local_output").mkdir(exist_ok=True)
+#         with open("local_output/twse_daily_2025-12-17.json", "w", encoding="utf-8") as f:
+#             json.dump(result, f, ensure_ascii=False, indent=2)
+#         print("\n✅ 已存到 local_output/twse_daily_2025-12-17.json")
+
+#         寫入 GCS Raw Layer(冪等覆蓋)
+#         client = get_gcs_client()
+
+#         content = json.dumps(result, ensure_ascii=False)
+#         write_raw_json(
+#             client=client,
+#             bucket_name=BUCKET_NAME,
+#             source_name="twse_daily",
+#             target_date=target_date,
+#             content=content,
+#         )
+#     else:
+#         print("⚠️ 無資料可寫入,略過此次上傳")

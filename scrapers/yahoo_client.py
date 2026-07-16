@@ -145,18 +145,18 @@ def fetch_yahoo_history(
 #         for row in result:
 #             print(row)
 
-if __name__ == "__main__":
-    test_stocks = [
-        {"stock_id": "2330", "market": "TWSE"},
-        {"stock_id": "1240", "market": "TPEx"},
-        {"stock_id": "0000", "market": "TWSE"},  # 故意放一個不存在的代號,測試失敗處理
-    ]
+# if __name__ == "__main__":
+#     test_stocks = [
+#         {"stock_id": "2330", "market": "TWSE"},
+#         {"stock_id": "1240", "market": "TPEx"},
+#         {"stock_id": "0000", "market": "TWSE"},  # 故意放一個不存在的代號,測試失敗處理
+#     ]
 
-    result = fetch_batch(
-        stock_list=test_stocks,
-        start_date=date(2026, 7, 8),
-        end_date=date(2026, 7, 8),
-        delay_seconds=1.5,
-    )
+#     result = fetch_batch(
+#         stock_list=test_stocks,
+#         start_date=date(2026, 7, 8),
+#         end_date=date(2026, 7, 8),
+#         delay_seconds=1.5,
+#     )
 
-    save_failed_list(result["failed"])
+#     save_failed_list(result["failed"])
