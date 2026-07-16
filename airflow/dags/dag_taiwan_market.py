@@ -110,6 +110,23 @@ with DAG(
         python_callable=run_industry_scraper,
     )
 
+    clean_industry = DockerOperator(
+        task_id="clean_industry_list",
+        image="stock-pulse-spark",
+        api_version="auto",
+        auto_remove="success",
+        command="/opt/spark/bin/spark-submit /app/spark/jobs/clean_industry_list.py",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        mounts=[
+            Mount(source="/home/fy/stock-pulse/secrets", target="/app/secrets", type="bind", read_only=True),
+        ],
+        environment={
+            "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
+            "GCP_BUCKET_NAME": "stock-pulse-data-lake",
+        },
+    )
+
     clean_daily = DockerOperator(
         task_id="clean_daily_stock_data",
         image="stock-pulse-spark",
@@ -127,5 +144,6 @@ with DAG(
         },
     )
 
-    # 依賴關係: 三個抓取任務都成功後,才觸發清洗
-    [fetch_twse, fetch_tpex, fetch_industry] >> clean_daily
+    # 依賴關係調整: 產業清單抓取+清洗 必須在 TWSE/TPEx 清洗之前完成(過濾要用最新清單)
+    fetch_industry >> clean_industry >> clean_daily
+    [fetch_twse, fetch_tpex] >> clean_daily

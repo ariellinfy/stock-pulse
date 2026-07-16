@@ -10,7 +10,7 @@ def explore():
     for ticker, label in test_cases:
         print(f"\n=== {label} ({ticker}) ===")
         stock = yf.Ticker(ticker)
-        hist = stock.history(start="2026-07-01", end="2026-07-09")
+        hist = stock.history(start="2026-07-01", end="2026-07-16")
         print(hist)
         print(f"欄位: {list(hist.columns)}")
         print(f"資料型態 (index): {type(hist.index)}")

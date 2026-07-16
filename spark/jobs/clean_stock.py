@@ -159,6 +159,7 @@ def clean_fear_greed_history(df):
         F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
     )
     df = df.withColumnRenamed("y", "score")
+    df = df.withColumn("score", F.round(F.col("score"), 2)) # round to 2 decimal places
     df = df.withColumnRenamed("rating", "fear_greed_rating")
     df = df.dropDuplicates(["dt"])  # 同一天多筆時,保留其中一筆(去重優先於精確選擇,先求資料不重複)
     df = df.select("dt", "score", "fear_greed_rating")

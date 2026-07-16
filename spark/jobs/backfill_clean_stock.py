@@ -15,7 +15,8 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
 from spark.common.schemas import TWSE_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
-from spark.jobs.clean_stock import clean_twse, clean_yahoo_history, unify_twse, unify_yahoo_tpex, filter_official_stocks
+from spark.jobs.clean_stock import clean_twse, clean_yahoo_history, unify_twse, unify_yahoo_tpex, filter_official_stocks, clean_fear_greed_history
+from spark.jobs.clean_industry_list import clean_and_write_industry_list
 
 
 def explode_daily_data(raw_df):
@@ -23,6 +24,7 @@ def explode_daily_data(raw_df):
     把巢狀結構 {dt, fields, data: [[...], [...]]} 展開成扁平結構:
     每一列代表某天某支股票的原始資料(16 個值的陣列),並保留 dt 欄位。
     """
+    raw_df = raw_df.filter(F.col("data").isNotNull()) # 明確排除沒有 data 欄位的記錄(如標記檔)
     exploded = raw_df.select(
         F.col("dt"),
         F.explode(F.col("data")).alias("row_values")  # 把 data 陣列展開,一個陣列元素變成一列
@@ -46,7 +48,7 @@ def flatten_to_columns(exploded_df):
 
 def backfill_all_markets(spark, bucket_name: str, twse_official_ids: list[str]):
     # TWSE 歷史
-    twse_raw = spark.read.option("multiline", "true").json(f"gs://{bucket_name}/raw/twse_daily/")
+    twse_raw = spark.read.option("multiline", "true").option("pathGlobFilter", "data.json").json(f"gs://{bucket_name}/raw/twse_daily/")
     twse_exploded = explode_daily_data(twse_raw)
     twse_flattened = flatten_to_columns(twse_exploded)
     twse_cleaned = clean_twse(twse_flattened)
@@ -102,6 +104,8 @@ def backfill_fear_greed(spark, bucket_name: str):
 
 if __name__ == "__main__":
     spark = build_spark_session("stock-pulse-backfill-clean-all")
+
+    clean_and_write_industry_list(spark, BUCKET_NAME)
 
     twse_industry_records = load_industry_list_from_gcs(BUCKET_NAME, "TWSE")
     twse_official_ids = [r["公司代號"] for r in twse_industry_records]

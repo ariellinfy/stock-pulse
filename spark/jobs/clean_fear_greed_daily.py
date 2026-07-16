@@ -20,7 +20,7 @@ def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
 
     cleaned = raw_df.select(
         F.lit(target_date).alias("dt"),
-        F.col("fear_and_greed.score").alias("score"),
+        F.round(F.col("fear_and_greed.score"), 2).alias("score"),
         F.col("fear_and_greed.rating").alias("fear_greed_rating"),
     )
 

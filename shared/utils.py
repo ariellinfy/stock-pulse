@@ -128,10 +128,8 @@ def normalize_stock_id(raw_id: str) -> Tuple[str, str]:
 
 def load_industry_list_from_gcs(bucket_name: str, market: str) -> list[dict]:
     """
-    直接從 GCS 讀取最新一份產業分類清單,取代依賴本機 local_output/ 檔案的做法。
-    容器環境沒有本機探索階段留下的檔案,必須直接讀權威來源。
+    直接從 GCS 讀取最新一份產業分類清單原始資料(raw layer)。
     """
-
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)
     prefix = f"raw/industry_list_{market.lower()}/"
@@ -141,5 +139,6 @@ def load_industry_list_from_gcs(bucket_name: str, market: str) -> list[dict]:
         raise RuntimeError(f"找不到 {prefix} 底下的任何資料")
 
     latest_blob = sorted(blobs, key=lambda b: b.name)[-1]
+    print(f"讀取檔案: {latest_blob.name}")
     content = json.loads(latest_blob.download_as_text())
     return content

@@ -115,7 +115,7 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 #     else:
 #         backfill_yahoo_tpex(
 #             start_date=date(2024, 7, 1),
-#             end_date=date(2026, 7, 10),
+#             end_date=date(2026, 7, 16),
 #         )
 
 if __name__ == "__main__":

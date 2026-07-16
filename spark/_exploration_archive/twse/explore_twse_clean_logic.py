@@ -15,74 +15,79 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, LongType
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+
+
+from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
 from spark.common.schemas import TWSE_RAW_SCHEMA
+from spark.common.spark_session import build_spark_session
+from spark.jobs.clean_stock import clean_twse, clean_yahoo_history, unify_twse, unify_yahoo_tpex, filter_official_stocks, clean_fear_greed_history
 
 
-def strip_commas_and_cast(col_name: str, target_type):
-    """去除千分位逗號,轉型成指定數字型態。"""
-    return F.regexp_replace(F.col(col_name), ",", "").cast(target_type)
-
-
-def clean_twse(df):
-    # 1. 數值欄位:去逗號 + 轉型
-    df = df.withColumn("trade_volume", strip_commas_and_cast("trade_volume", LongType()))
-    df = df.withColumn("transaction_count", strip_commas_and_cast("transaction_count", LongType()))
-    df = df.withColumn("trade_value", strip_commas_and_cast("trade_value", LongType()))
-    df = df.withColumn("open_price", strip_commas_and_cast("open_price", DoubleType()))
-    df = df.withColumn("high_price", strip_commas_and_cast("high_price", DoubleType()))
-    df = df.withColumn("low_price", strip_commas_and_cast("low_price", DoubleType()))
-    df = df.withColumn("close_price", strip_commas_and_cast("close_price", DoubleType()))
-    df = df.withColumn("last_bid_price", strip_commas_and_cast("last_bid_price", DoubleType()))
-    df = df.withColumn("last_bid_volume", strip_commas_and_cast("last_bid_volume", LongType()))
-    df = df.withColumn("last_ask_price", strip_commas_and_cast("last_ask_price", DoubleType()))
-    df = df.withColumn("last_ask_volume", strip_commas_and_cast("last_ask_volume", LongType()))
-    df = df.withColumn("pe_ratio", strip_commas_and_cast("pe_ratio", DoubleType()))
-
-    # 2. 從 HTML tag 中抽出純漲跌符號
-    #    pattern 解釋: <p 開頭(不管後面帶什麼屬性)> 中間文字 </p>,取出中間文字並去除頭尾空白
-    df = df.withColumn(
-        "change_direction",
-        F.trim(F.regexp_extract(F.col("change_symbol_raw"), r"<p[^>]*>(.*?)</p>", 1))
+def explode_daily_data(raw_df):
+    """
+    把巢狀結構 {dt, fields, data: [[...], [...]]} 展開成扁平結構:
+    每一列代表某天某支股票的原始資料(16 個值的陣列),並保留 dt 欄位。
+    """
+    exploded = raw_df.select(
+        F.col("dt"),
+        F.explode(F.col("data")).alias("row_values")  # 把 data 陣列展開,一個陣列元素變成一列
     )
+    return exploded
 
-    # 3. change_amount 先去逗號轉型成數字(這裡先不管正負號,只是把字串變數字)
-    df = df.withColumn("change_amount", strip_commas_and_cast("change_amount", DoubleType()))
 
-    # 4. 依照 change_direction 組出帶正負號的漲跌數字
-    #    X = 不適用比較,存 null(不是 0),避免語意上被誤解為「持平」
-    df = df.withColumn(
-        "signed_change_amount",
-        F.when(F.col("change_direction") == "-", -F.col("change_amount"))
-         .when(F.col("change_direction") == "X", F.lit(None).cast(DoubleType()))
-         .otherwise(F.col("change_amount"))
-    )
+def flatten_to_columns(exploded_df):
+    """
+    把 row_values 陣列(16 個位置固定的值),依照 TWSE_RAW_SCHEMA 的欄位順序,
+    拆成獨立的欄位,對應到跟本機探索階段完全一致的 schema。
+    """
+    field_names = [f.name for f in TWSE_RAW_SCHEMA.fields]  # 取得我們定義好的 16 個欄位名稱,順序一致
 
-    return df
+    select_exprs = [F.col("dt")]
+    for i, name in enumerate(field_names):
+        select_exprs.append(F.col("row_values")[i].alias(name))
+
+    return exploded_df.select(*select_exprs)
 
 
 def explore():
-    spark = (
-        SparkSession.builder
-        .appName("stock-pulse-clean-explore")
-        .master("local[*]")
-        .getOrCreate()
-    )
+    # spark = (
+    #     SparkSession.builder
+    #     .appName("stock-pulse-clean-explore")
+    #     .master("local[*]")
+    #     .getOrCreate()
+    # )
 
-    with open("local_output/twse_daily_2026-07-09.json", "r", encoding="utf-8") as f:
-        raw = json.load(f)
-    rows = raw["data"]
+    spark = build_spark_session("stock-pulse-backfill-clean-twse-test")
 
-    df = spark.createDataFrame(rows, schema=TWSE_RAW_SCHEMA)
-    cleaned = clean_twse(df)
+    # with open("local_output/twse_daily_2026-07-09.json", "r", encoding="utf-8") as f:
+    #     raw = json.load(f)
+    # rows = raw["data"]
+
+    twse_industry_records = load_industry_list_from_gcs(BUCKET_NAME, "TWSE")
+    twse_official_ids = [r["公司代號"] for r in twse_industry_records]
+
+    twse_raw = spark.read.option("multiline", "true").option("pathGlobFilter", "data.json").json(f"gs://{BUCKET_NAME}/raw/twse_daily/")
+    twse_exploded = explode_daily_data(twse_raw)
+    twse_flattened = flatten_to_columns(twse_exploded)
+    twse_cleaned = clean_twse(twse_flattened)
+    twse_unified = unify_twse(twse_cleaned)
+    twse_filtered = filter_official_stocks(twse_unified, twse_official_ids)
+    twse_filtered = twse_filtered.withColumn("dt", F.col("dt").cast("string"))
+
+    # df = spark.createDataFrame(rows, schema=TWSE_RAW_SCHEMA)
+    # cleaned = clean_twse(df)
 
     print("=== 清洗後 schema ===")
-    cleaned.printSchema()
+    twse_filtered.printSchema()
 
-    print("\n=== 驗證關鍵欄位(前 5 筆,涵蓋 +/-/X 三種案例)===")
-    cleaned.select(
-        "stock_id", "close_price", "change_symbol_raw",
-        "change_direction", "change_amount", "signed_change_amount"
-    ).show(5, truncate=False)
+    # print("\n=== 驗證關鍵欄位(前 5 筆,涵蓋 +/-/X 三種案例)===")
+    twse_filtered.show(5, truncate=False)
+
+    # print("\n=== 驗證關鍵欄位(前 5 筆,涵蓋 +/-/X 三種案例)===")
+    # cleaned.select(
+    #     "stock_id", "close_price", "change_symbol_raw",
+    #     "change_direction", "change_amount", "signed_change_amount"
+    # ).show(5, truncate=False)
 
     spark.stop()
 
