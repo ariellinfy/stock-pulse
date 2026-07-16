@@ -1,8 +1,14 @@
-secrets/
+*.pyc
+__pycache__/
+
 .env
 .venv/
 .git/
+
+secrets/
 local_output/
+
+scrapers/_exploration_archive/
+
 spark/_exploration_archive/
-*.pyc
-__pycache__/
+spark/Dockerfile

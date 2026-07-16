@@ -1,7 +1,9 @@
+x-airflow-build: &airflow-common-build
+  context: .
+  dockerfile: airflow/Dockerfile
+
 x-airflow-common: &airflow-common
-  build:
-    context: .
-    dockerfile: airflow/Dockerfile
+  build: *airflow-common-build
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -17,11 +19,10 @@ x-airflow-common: &airflow-common
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
-    # 新增: 把整個專案掛進容器,讓 DAG 能 import 我們的爬蟲/共用模組
     - ./scrapers:/opt/airflow/project/scrapers
     - ./shared:/opt/airflow/project/shared
-    # 新增: 掛載金鑰(唯讀,容器不需要寫入它)
-    - ./secrets:/opt/airflow/secrets:ro
+    - ./secrets:/opt/airflow/secrets:ro # 掛載金鑰(唯讀,容器不需要寫入它)
+    - /var/run/docker.sock:/var/run/docker.sock
   depends_on:
     postgres:
       condition: service_healthy
@@ -71,6 +72,21 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+
+  backfill:
+    build: *airflow-common-build
+    environment:
+      GCP_BUCKET_NAME: ${GCP_BUCKET_NAME}
+      GCP_SA_KEY_PATH: /opt/airflow/secrets/gcp-sa-key.json
+      PYTHONPATH: /opt/airflow/project
+    volumes:
+      - ./scrapers:/opt/airflow/project/scrapers
+      - ./shared:/opt/airflow/project/shared
+      - ./scripts:/opt/airflow/project/scripts
+      - ./secrets:/opt/airflow/secrets:ro
+    entrypoint: ""
+    profiles:
+      - tools # 標記成工具型服務,docker compose up 不會自動啟動它
 
 volumes:
   postgres-db-volume:
