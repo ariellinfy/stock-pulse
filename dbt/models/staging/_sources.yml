@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: staging
+    dataset: stockpulse_staging
+    tables:
+      - name: raw_stock_daily
+      - name: raw_fear_greed
+      - name: raw_industry_list

@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: fact_stock_daily
+    columns:
+      - name: stock_id
+        tests:
+          - not_null
+      - name: trade_date
+        tests:
+          - not_null
+      - name: close_price
+        tests:
+          - not_null
+      - name: rsi14
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+  - name: fact_industry_price
+    columns:
+      - name: trade_date
+        tests:
+          - not_null
+      - name: industry_code
+        tests:
+          - not_null
+
+  - name: fact_fear_greed
+    columns:
+      - name: index_date
+        tests:
+          - unique
+          - not_null
+      - name: fear_greed_score
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
