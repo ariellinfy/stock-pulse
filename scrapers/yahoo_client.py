@@ -38,47 +38,6 @@ def save_failed_list(failed: list[str], filepath: str = "local_output/yahoo_fail
     print(f"✅ 失敗清單已存至 {filepath}")
 
     
-def fetch_batch(
-    stock_list: list[dict],  # 每個 dict 需要有 'stock_id' 跟 'market'
-    start_date: date,
-    end_date: date,
-    delay_seconds: float = 1.5,
-) -> dict:
-    """
-    批次抓取多支股票的 Yahoo 歷史資料,單支失敗不中斷整批。
-
-    回傳:
-        {
-            "success": {stock_id: [records...], ...},
-            "failed": [stock_id, ...],  # 失敗清單,供之後補抓使用
-        }
-    """
-    success: dict[str, list[dict]] = {}
-    failed: list[str] = []
-    total = len(stock_list)
-
-    for i, item in enumerate(stock_list, start=1):
-        stock_id = item["stock_id"]
-        market = item["market"]
-
-        print(f"[{i}/{total}] 抓取 {stock_id} ({market})...")
-        result = fetch_yahoo_history(stock_id, market, start_date, end_date)
-
-        if result:
-            success[stock_id] = result
-        else:
-            failed.append(stock_id)
-
-        # 每支股票之間都要間隔,即使失敗也要等,避免連續失敗時反而打更快
-        time.sleep(delay_seconds)
-
-    print(f"\n=== 批次完成 ===")
-    print(f"成功: {len(success)} / {total}")
-    print(f"失敗: {len(failed)} 檔: {failed}")
-
-    return {"success": success, "failed": failed}
-
-    
 def fetch_yahoo_history(
     stock_id: str,
     market: str,
@@ -130,6 +89,47 @@ def fetch_yahoo_history(
 
     print(f"❌ {ticker_symbol} 已達最大重試次數,放棄")
     return None
+
+
+def fetch_batch(
+    stock_list: list[dict],  # 每個 dict 需要有 'stock_id' 跟 'market'
+    start_date: date,
+    end_date: date,
+    delay_seconds: float = 1.5,
+) -> dict:
+    """
+    批次抓取多支股票的 Yahoo 歷史資料,單支失敗不中斷整批。
+
+    回傳:
+        {
+            "success": {stock_id: [records...], ...},
+            "failed": [stock_id, ...],  # 失敗清單,供之後補抓使用
+        }
+    """
+    success: dict[str, list[dict]] = {}
+    failed: list[str] = []
+    total = len(stock_list)
+
+    for i, item in enumerate(stock_list, start=1):
+        stock_id = item["stock_id"]
+        market = item["market"]
+
+        print(f"[{i}/{total}] 抓取 {stock_id} ({market})...")
+        result = fetch_yahoo_history(stock_id, market, start_date, end_date)
+
+        if result:
+            success[stock_id] = result
+        else:
+            failed.append(stock_id)
+
+        # 每支股票之間都要間隔,即使失敗也要等,避免連續失敗時反而打更快
+        time.sleep(delay_seconds)
+
+    print(f"\n=== 批次完成 ===")
+    print(f"成功: {len(success)} / {total}")
+    print(f"失敗: {len(failed)} 檔: {failed}")
+
+    return {"success": success, "failed": failed}
 
 
 # if __name__ == "__main__":

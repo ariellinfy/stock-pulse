@@ -2,7 +2,9 @@
 
 {{
   config(
-    materialized='table'
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    partition_by={'field': 'trade_date', 'data_type': 'date'}
   )
 }}
 
@@ -22,7 +24,11 @@ with stock_with_industry as (
         on s.stock_id = u.stock_id
     where coalesce(s.trade_value, s.trade_volume) > 0
       and s.close_price is not null
+    {% if is_incremental() %}
+    and s.trade_date >= (select date_sub(max(trade_date), interval 3 day) from {{ this }})
+    {% endif %}
 )
+
 
 select
     trade_date,

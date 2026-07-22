@@ -16,3 +16,15 @@ clean-targets:
 models:
   stock_pulse:
     +materialized: view
+    staging:
+      +schema: stockpulse_staging
+    intermediate:
+      +schema: stockpulse_staging
+    marts:
+      +schema: stockpulse_marts
+
+seeds:
+  stock_pulse:
+    industry_code_mapping:
+      +column_types:
+        industry_code: string

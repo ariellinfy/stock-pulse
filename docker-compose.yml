@@ -1,35 +1,44 @@
 x-airflow-build: &airflow-common-build
   context: .
   dockerfile: airflow/Dockerfile
+  args:
+      DOCKER_GID: "1001"   # getent group docker 的實際數字
 
 x-airflow-common: &airflow-common
   build: *airflow-common-build
-  environment:
+  environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Taipei
-    AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: Asia/Taipei
-    # 讓容器內的 Python 能找到我們的 scrapers/、shared/ 模組
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET}
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     PYTHONPATH: /opt/airflow/project
-    # 讓 shared/utils.py 的 get_required_env() 能讀到這些值
     GCP_BUCKET_NAME: ${GCP_BUCKET_NAME}
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     GCP_SA_KEY_PATH: /opt/airflow/secrets/gcp-sa-key.json
+    AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT: 'google-cloud-platform://?key_path=%2Fopt%2Fairflow%2Fsecrets%2Fgcp-sa-key.json&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&project=stock-pulse-260629'
+  group_add:
+    - "1001"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
     - ./scrapers:/opt/airflow/project/scrapers
     - ./shared:/opt/airflow/project/shared
-    - ./secrets:/opt/airflow/secrets:ro # 掛載金鑰(唯讀,容器不需要寫入它)
+    - ./secrets:/opt/airflow/secrets:ro
     - /var/run/docker.sock:/var/run/docker.sock
-  depends_on:
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
     postgres:
       condition: service_healthy
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:16
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -38,9 +47,9 @@ services:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
-      interval: 5s
+      interval: 10s
       retries: 5
-    restart: always
+      start_period: 5s
 
   airflow-init:
     <<: *airflow-common
@@ -48,28 +57,76 @@ services:
     command:
       - -c
       - |
-        airflow db migrate
-        airflow users create \
-          --username admin \
-          --password admin \
-          --firstname Admin \
-          --lastname User \
-          --role Admin \
-          --email admin@example.com
+        mkdir -v -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+        /entrypoint airflow version
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
+    user: "0:0"
 
-  airflow-webserver:
+  airflow-triggerer:
     <<: *airflow-common
-    command: webserver
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
     depends_on:
+      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
     depends_on:
+      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
 
@@ -87,6 +144,25 @@ services:
     entrypoint: ""
     profiles:
       - tools # 標記成工具型服務,docker compose up 不會自動啟動它
+
+  spark:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    profiles:
+      - tools
+      
+  dbt:
+    build:
+      context: .
+      dockerfile: dbt/Dockerfile
+    environment:
+      GCP_SA_KEY_PATH: /app/secrets/gcp-sa-key.json
+    volumes:
+      - ./secrets:/app/secrets:ro
+      - ./dbt/profiles.yml:/root/.dbt/profiles.yml:ro
+    profiles:
+      - tools
 
 volumes:
   postgres-db-volume:

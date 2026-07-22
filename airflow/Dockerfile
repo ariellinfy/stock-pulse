@@ -1,4 +1,4 @@
-FROM apache/airflow:2.10.3-python3.12
+FROM apache/airflow:3.3.0-python3.12
 
 USER root
 
@@ -10,6 +10,5 @@ RUN usermod -aG docker_host airflow
 
 USER airflow
 
-COPY requirements.txt /requirements.txt
-RUN pip install --no-cache-dir -r /requirements.txt
-RUN pip install --no-cache-dir apache-airflow-providers-docker
+COPY requirements-airflow.txt /requirements-airflow.txt
+RUN pip install --no-cache-dir -r /requirements-airflow.txt

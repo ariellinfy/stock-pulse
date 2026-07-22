@@ -23,7 +23,7 @@ def download_blob(bucket_name: str, blob_path: str, local_path: str):
 
 if __name__ == "__main__":
     # 挑幾檔 Yahoo TPEx 歷史資料下載到本機測試用
-    samples = ["6026", "1240", "6488"]
+    samples = ["7794"]
 
     for stock_id in samples:
         blob_path = f"raw/yahoo_tpex_history/stock_id={stock_id}/data.json"

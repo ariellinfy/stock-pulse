@@ -5,15 +5,30 @@ dag_taiwan_market:每日例行排程
 排程: 每天 17:00(台北時間,對應收盤後)
 """
 
+import os
 import sys
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+
+from airflow.providers.standard.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import ShortCircuitOperator
 from airflow.providers.docker.operators.docker import DockerOperator
+from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
+from airflow.providers.google.cloud.operators.bigquery import BigQueryDeleteTableOperator
+
 from docker.types import Mount
 
 sys.path.insert(0, "/opt/airflow/project")
+
+
+def check_trading_day(**context):
+    target_date = context["data_interval_end"].in_timezone('Asia/Taipei').date()
+    is_weekend = target_date.weekday() >= 5  # 5=星期六, 6=星期日
+    if is_weekend:
+        print(f"{target_date} 是週末,跳過本次排程,不浪費時間重試")
+        return False
+    return True
 
 
 def run_twse_scraper(**context):
@@ -22,7 +37,7 @@ def run_twse_scraper(**context):
     from datetime import datetime as dt
     import json
 
-    target_date = context["data_interval_end"].date()
+    target_date = context["data_interval_end"].in_timezone('Asia/Taipei').date()
     print(f"處理日期: {target_date}")
 
     result = fetch_daily_quotes_no_permanent_mark(target_date)
@@ -45,7 +60,7 @@ def run_tpex_scraper(**context):
     from datetime import datetime as dt
     import json
 
-    target_date = context["data_interval_end"].date()
+    target_date = context["data_interval_end"].in_timezone('Asia/Taipei').date()
     print(f"處理日期: {target_date}")
 
     # 提醒: TPEx 官方端點固定回傳「當下最新交易日」,不保證等於 target_date
@@ -90,10 +105,15 @@ with DAG(
     dag_id="DAG_Taiwan_Market",
     default_args=default_args,
     schedule="0 17 * * *",
-    start_date=datetime(2026, 1, 1),
+    start_date=datetime(2026, 7, 1),
     catchup=False,
     tags=["daily", "market_data"],
 ) as dag:
+
+    check_trading_day_task = ShortCircuitOperator(
+        task_id="check_trading_day",
+        python_callable=check_trading_day,
+    )
 
     fetch_twse = PythonOperator(
         task_id="fetch_twse_daily",
@@ -132,7 +152,7 @@ with DAG(
         image="stock-pulse-spark",
         api_version="auto",
         auto_remove="success",  # 任務成功後自動清除容器,避免堆積
-        command="/opt/spark/bin/spark-submit /app/spark/jobs/clean_stock_daily.py --date {{ data_interval_end.strftime('%Y-%m-%d') }}",
+        command="/opt/spark/bin/spark-submit /app/spark/jobs/clean_stock_daily.py --date {{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}",
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[
@@ -144,6 +164,51 @@ with DAG(
         },
     )
 
-    # 依賴關係調整: 產業清單抓取+清洗 必須在 TWSE/TPEx 清洗之前完成(過濾要用最新清單)
+    project_id = os.environ.get("GCP_PROJECT_ID")
+
+    delete_today_stock_partition = BigQueryDeleteTableOperator(
+        task_id="delete_today_stock_partition",
+        gcp_conn_id="google_cloud_default",
+        deletion_dataset_table=(
+            f"{project_id}.stockpulse_staging.raw_stock_daily"
+            "${{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y%m%d') }}"
+        ),
+        ignore_if_missing=True,
+    )
+
+    load_stock_to_bq = GCSToBigQueryOperator(
+        task_id="load_stock_daily_to_bq",
+        gcp_conn_id="google_cloud_default",
+        bucket="stock-pulse-data-lake",
+        source_objects=["clean/stock_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"],
+        destination_project_dataset_table=f"{project_id}.stockpulse_staging.raw_stock_daily",
+        source_format="PARQUET",
+        write_disposition="WRITE_APPEND",
+        extra_config={
+            "hivePartitioningOptions": {
+                "mode": "AUTO",
+                "sourceUriPrefix": "gs://stock-pulse-data-lake/clean/stock_daily/"
+            }
+        }
+    )
+
+    run_dbt = DockerOperator(
+        task_id="run_dbt_models",
+        image="stock-pulse-dbt",
+        api_version="auto",
+        auto_remove="success",
+        command="dbt run",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        mounts=[
+            Mount(source="/home/fy/stock-pulse/secrets", target="/app/secrets", type="bind", read_only=True),
+        ],
+    )
+
+    # 判斷是否為平日(週末跳過)
+    check_trading_day_task >> [fetch_twse, fetch_tpex, fetch_industry]
+    # 產業清單抓取+清洗 必須在 TWSE/TPEx 清洗之前完成(過濾要用最新清單)
     fetch_industry >> clean_industry >> clean_daily
     [fetch_twse, fetch_tpex] >> clean_daily
+    # 刪除今天分區(避免重複)+載入BQ
+    clean_daily >> delete_today_stock_partition >> load_stock_to_bq >> run_dbt

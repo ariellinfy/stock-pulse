@@ -1,0 +1,11 @@
+
+    
+    
+
+
+
+select industry_code
+from `stock-pulse-260629`.`stockpulse_staging`.`dim_industry`
+where industry_code is null
+
+

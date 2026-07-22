@@ -33,6 +33,7 @@ def to_roc_date(target_date: date) -> str:
     roc_year = target_date.year - 1911
     return f"{roc_year}/{target_date.month:02d}/{target_date.day:02d}"
 
+
 def roc_to_gregorian(roc_date_str: str) -> str:
     """
     將 TPEx 回傳的民國日期字串轉成西元 ISO 格式。
@@ -41,6 +42,7 @@ def roc_to_gregorian(roc_date_str: str) -> str:
     roc_year, month, day = roc_date_str.split("/")
     gregorian_year = int(roc_year) + 1911
     return f"{gregorian_year}-{month}-{day}"
+
 
 def validate_fields(actual_fields: list[str]) -> bool:
     if actual_fields != EXPECTED_FIELDS:

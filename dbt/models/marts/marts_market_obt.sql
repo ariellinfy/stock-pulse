@@ -1,8 +1,8 @@
--- dbt/models/marts/marts_market_obt.sql
-
 {{
   config(
-    materialized='table'
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    partition_by={'field': 'trade_date', 'data_type': 'date'}
   )
 }}
 
@@ -35,3 +35,6 @@ left join {{ ref('fact_industry_price') }} ip
     and f.market = ip.market
 left join {{ ref('fact_fear_greed') }} fg
     on f.trade_date = fg.index_date
+{% if is_incremental() %}
+where f.trade_date >= (select date_sub(max(trade_date), interval 3 day) from {{ this }})
+{% endif %}

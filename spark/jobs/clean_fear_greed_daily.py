@@ -18,11 +18,29 @@ def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
     raw_path = f"gs://{bucket_name}/raw/fear_greed/dt={target_date}/data.json"
     raw_df = spark.read.option("multiline", "true").json(raw_path)
 
-    cleaned = raw_df.select(
-        F.lit(target_date).alias("dt"),
-        F.round(F.col("fear_and_greed.score"), 2).alias("score"),
-        F.col("fear_and_greed.rating").alias("fear_greed_rating"),
+    # 展開 historical.data 陣列,找出精確對應 target_date 這一天的記錄
+    exploded = raw_df.select(
+        F.explode(F.col("fear_and_greed_historical.data")).alias("record")
     )
+
+    matched = exploded.select(
+        F.from_unixtime((F.col("record.x") / 1000).cast("long"), "yyyy-MM-dd").alias("record_date"),
+        F.col("record.y").alias("score"),
+        F.col("record.rating").alias("fear_greed_rating"),
+    ).filter(F.col("record_date") == target_date)
+
+    cleaned = matched.select(
+        F.lit(target_date).alias("dt"),
+        F.round(F.col("score"), 2).alias("score"),
+        "fear_greed_rating",
+    )
+
+    count = cleaned.count()
+    if count == 0:
+        raise ValueError(f"{target_date} 在 historical.data 裡找不到對應記錄,清洗失敗")
+    if count > 1:
+        print(f"⚠️ {target_date} 找到 {count} 筆記錄(預期 1 筆),取第一筆")
+        cleaned = cleaned.limit(1)
 
     print(f"{target_date} Fear & Greed 清洗後總筆數: {cleaned.count()}")
     cleaned.show(truncate=False)

@@ -9,9 +9,64 @@ models:
       - name: trade_date
         tests:
           - not_null
+      - name: market
+        tests:
+          - accepted_values:
+              values: ['TWSE', 'TPEx']
       - name: close_price
         tests:
-          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              config:
+                where: "close_price is not null"
+      - name: open_price
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              config:
+                where: "open_price is not null"
+      - name: high_price
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              config:
+                where: "high_price is not null"
+      - name: low_price
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              config:
+                where: "low_price is not null"
+      - name: trade_volume
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: "trade_volume is not null"
+      - name: trade_value
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: "trade_value is not null"
+      - name: ma5
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+              config:
+                where: "ma5 is not null"
+      - name: ma20
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+              config:
+                where: "ma20 is not null"
       - name: rsi14
         tests:
           - dbt_utils.accepted_range:
@@ -26,6 +81,29 @@ models:
       - name: industry_code
         tests:
           - not_null
+      - name: market
+        tests:
+          - accepted_values:
+              values: ['TWSE', 'TPEx']
+      - name: weighted_avg_price
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+              config:
+                where: "weighted_avg_price is not null"
+      - name: total_weight_basis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: stock_count
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+      - name: weighting_method
+        tests:
+          - accepted_values:
+              values: ['trade_value', 'trade_volume', 'mixed']
 
   - name: fact_fear_greed
     columns:
@@ -38,3 +116,7 @@ models:
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
+      - name: fear_greed_rating
+        tests:
+          - accepted_values:
+              values: ['extreme fear', 'fear', 'neutral', 'greed', 'extreme greed']

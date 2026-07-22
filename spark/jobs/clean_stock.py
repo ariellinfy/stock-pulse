@@ -105,14 +105,22 @@ def unify_tpex(df):
         F.lit(None).cast(DoubleType()).alias("pe_ratio"),
         F.col("issued_shares"),
     )
-    
+
 
 def clean_yahoo_history(df):
     """
     清洗 Yahoo Finance 歷史資料。
     已知現象: yfinance 回傳還原權息調整後價格,運算會產生長串浮點數精度,
               round 到 2 位小數對齊官方資料精度慣例。
+    另一已知現象: 若當日完全無成交(volume=0),yfinance 可能回傳 NaN
+              而非 null,需明確轉換,避免 NaN 污染下游數值比較與計算。
     """
+    for col_name in ["open", "high", "low", "close"]:
+        df = df.withColumn(
+            col_name,
+            F.when(F.isnan(F.col(col_name)), F.lit(None)).otherwise(F.col(col_name))
+        )
+
     df = df.withColumn("open", F.round(F.col("open"), 2))
     df = df.withColumn("high", F.round(F.col("high"), 2))
     df = df.withColumn("low", F.round(F.col("low"), 2))
