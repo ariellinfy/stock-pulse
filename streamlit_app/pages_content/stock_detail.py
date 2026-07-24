@@ -12,10 +12,10 @@ def render(client, start_date_filter):
         return
 
     info_query = f"""
-    SELECT s.stock_id, s.company_name, s.stock_name, s.market, i.industry_name
-    FROM `stockpulse_marts.dim_stock` s
-    LEFT JOIN `stockpulse_marts.dim_industry` i ON s.industry_code = i.industry_code
-    WHERE s.stock_id = '{stock_id}'
+    SELECT DISTINCT stock_id, company_name, stock_name, market, industry_name
+    FROM `stockpulse_marts.marts_market_obt`
+    WHERE stock_id = '{stock_id}'
+    LIMIT 1
     """
     info_df = client.query(info_query).to_dataframe()
 

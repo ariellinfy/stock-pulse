@@ -3,7 +3,6 @@
 本地測試與之後 Docker/Airflow 內執行都呼叫這裡，確保設定一致。
 """
 import os
-from pathlib import Path
 from pyspark.sql import SparkSession
 from dotenv import load_dotenv
 

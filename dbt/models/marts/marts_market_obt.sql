@@ -1,3 +1,5 @@
+-- dbt/models/marts/marts_market_obt.sql
+
 {{
   config(
     materialized='incremental',
@@ -13,6 +15,7 @@ select
     s.stock_name,
     f.market,
     s.industry_code,
+    ind.industry_name,
     f.open_price,
     f.high_price,
     f.low_price,
@@ -27,14 +30,13 @@ select
     fg.fear_greed_score,
     fg.fear_greed_rating
 from {{ ref('fact_stock_daily') }} f
-left join {{ ref('dim_stock') }} s
-    on f.stock_id = s.stock_id
+left join {{ ref('dim_stock') }} s on f.stock_id = s.stock_id
+left join {{ ref('dim_industry') }} ind on s.industry_code = ind.industry_code
 left join {{ ref('fact_industry_price') }} ip
     on f.trade_date = ip.trade_date
     and s.industry_code = ip.industry_code
     and f.market = ip.market
-left join {{ ref('fact_fear_greed') }} fg
-    on f.trade_date = fg.index_date
+left join {{ ref('fact_fear_greed') }} fg on f.trade_date = fg.index_date
 {% if is_incremental() %}
 where f.trade_date >= (select date_sub(max(trade_date), interval 3 day) from {{ this }})
 {% endif %}

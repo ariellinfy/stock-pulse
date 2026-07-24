@@ -4,19 +4,17 @@
 """
 
 import sys
-import json
 from pathlib import Path
-from datetime import date
 
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import BUCKET_NAME, get_gcs_client, load_industry_list_from_gcs
+from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
 from spark.common.schemas import TWSE_RAW_SCHEMA, TPEX_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
 from spark.jobs.clean_stock import (
     clean_twse, clean_tpex, unify_twse, unify_tpex,
-    filter_official_stocks, add_trade_date
+    filter_official_stocks
 )
 
 

@@ -8,7 +8,6 @@ TWSE + Yahoo TPEx 歷史資料批次清洗 job。
 import sys
 from pathlib import Path
 
-from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))

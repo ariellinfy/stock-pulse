@@ -7,17 +7,7 @@ TWSE/TPEx 原始資料的明確 schema 定義。
     不要在讀取這一步就嘗試自動轉數字型態(容易因為逗號、HTML tag 而失敗或出錯)。
 """
 
-from pyspark.sql.types import StructType, StructField, DoubleType, StringType, LongType
-
-
-# 在 spark/common/schemas.py 裡,幫每個 schema 附上「預期的原始中文欄位順序」,
-# 讓程式能自動核對,而不是只靠人工當初寫的時候看一眼
-
-TPEX_EXPECTED_RAW_FIELDS = [
-    "代號", "名稱", "收盤", "漲跌", "開盤", "最高", "最低", "均價",
-    "成交股數", "成交金額(元)", "成交筆數", "最後買價", "最後買量(張數)",
-    "最後賣價", "最後賣量(張數)", "發行股數", "次日 參考價", "次日 漲停價", "次日 跌停價",
-]
+from pyspark.sql.types import StructType, StructField, DoubleType, StringType
 
 
 def assert_fields_match(actual_fields: list[str], expected_fields: list[str], source_name: str):

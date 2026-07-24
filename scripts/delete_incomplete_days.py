@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+from shared.utils import get_gcs_client, BUCKET_NAME
 
 
 def delete_and_requeue(bucket_name: str, dates_to_fix: list[str]):

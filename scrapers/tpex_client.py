@@ -10,13 +10,10 @@ TPEx 每日全市場收盤行情爬蟲(上櫃)
 """
 
 import sys
-import json
 import requests
-from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 TPEX_URL = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php"
 
@@ -93,6 +90,10 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
 
 
 # if __name__ == "__main__":
+#     import json
+#     from datetime import date
+#     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+    
 #     target_date = date(2026, 7, 9)
 #     result  = fetch_daily_quotes(target_date)
 

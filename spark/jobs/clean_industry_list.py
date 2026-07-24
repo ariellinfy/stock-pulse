@@ -7,13 +7,12 @@
 """
 
 import sys
-import json
 from pathlib import Path
 
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import get_gcs_client, load_industry_list_from_gcs
+from shared.utils import load_industry_list_from_gcs
 
 
 def clean_industry_list(df, market: str):

@@ -32,7 +32,6 @@ def load_tpex_stock_list(client, bucket_name: str) -> list[str]:
     # 目前產業分類清單是按「抓取當天」分區的,先用最簡單的方式:
     # 直接讀最近一次存的那份(還記得我們之前討論過,這份清單本質是「快照」,
     # 下游只在乎最新一份)
-    import re
     bucket = client.bucket(bucket_name)
     blobs = list(bucket.list_blobs(prefix=f"raw/industry_list_tpex/"))
 
@@ -118,16 +117,16 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 #             end_date=date(2026, 7, 16),
 #         )
 
-if __name__ == "__main__":
-    import argparse
-    from datetime import datetime
+# if __name__ == "__main__":
+#     import argparse
+#     from datetime import datetime
 
-    parser = argparse.ArgumentParser(description="TPEx 歷史資料回補(透過 Yahoo Finance)")
-    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
-    parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
-    args = parser.parse_args()
+#     parser = argparse.ArgumentParser(description="TPEx 歷史資料回補(透過 Yahoo Finance)")
+#     parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
+#     parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
+#     args = parser.parse_args()
 
-    start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-    end = datetime.strptime(args.end_date, "%Y-%m-%d").date()
+#     start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+#     end = datetime.strptime(args.end_date, "%Y-%m-%d").date()
 
-    backfill_yahoo_tpex(start_date=start, end_date=end)
+#     backfill_yahoo_tpex(start_date=start, end_date=end)

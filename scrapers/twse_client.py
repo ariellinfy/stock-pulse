@@ -10,14 +10,11 @@ TWSE 每日全市場收盤行情爬蟲
 """
 
 import sys
-import json
 import time
 import requests
-from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 TWSE_URL = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 DAILY_QUOTES_TABLE_INDEX = 8  # 「每日收盤行情(全部...)」在 tables 陣列中的位置
@@ -33,6 +30,7 @@ EXPECTED_FIELDS = [
     "開盤價", "最高價", "最低價", "收盤價", "漲跌(+/-)", "漲跌價差",
     "最後揭示買價", "最後揭示買量", "最後揭示賣價", "最後揭示賣量", "本益比",
 ]
+
 
 def validate_fields(actual_fields: list[str]) -> bool:
     """
@@ -193,31 +191,35 @@ def fetch_daily_quotes_no_permanent_mark(target_date: date, max_retries: int = 3
     return None
 
 
-if __name__ == "__main__":
-    target_date = date(2026, 7, 11)
-    result = fetch_daily_quotes(target_date)
+# if __name__ == "__main__":
+#     import json
+#     from datetime import date
+#     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+    
+#     target_date = date(2026, 7, 11)
+#     result = fetch_daily_quotes(target_date)
 
-    if result :
-        # print("\n=== 前 2 筆原始資料(未清洗)===")
-        # for row in result["data"][:2]:
-        #     print(row)
+#     if result :
+#         # print("\n=== 前 2 筆原始資料(未清洗)===")
+#         # for row in result["data"][:2]:
+#         #     print(row)
 
-        # 存到本地檔案先驗證,還不上傳 GCS
-        # Path("local_output").mkdir(exist_ok=True)
-        # with open("local_output/twse_daily_2025-12-17.json", "w", encoding="utf-8") as f:
-        #     json.dump(result, f, ensure_ascii=False, indent=2)
-        # print("\n✅ 已存到 local_output/twse_daily_2025-12-17.json")
+#         # 存到本地檔案先驗證,還不上傳 GCS
+#         # Path("local_output").mkdir(exist_ok=True)
+#         # with open("local_output/twse_daily_2025-12-17.json", "w", encoding="utf-8") as f:
+#         #     json.dump(result, f, ensure_ascii=False, indent=2)
+#         # print("\n✅ 已存到 local_output/twse_daily_2025-12-17.json")
 
-        # 寫入 GCS Raw Layer(冪等覆蓋)
-        client = get_gcs_client()
+#         # 寫入 GCS Raw Layer(冪等覆蓋)
+#         client = get_gcs_client()
 
-        content = json.dumps(result, ensure_ascii=False)
-        write_raw_json(
-            client=client,
-            bucket_name=BUCKET_NAME,
-            source_name="twse_daily",
-            target_date=target_date,
-            content=content,
-        )
-    else:
-        print("⚠️ 無資料可寫入,略過此次上傳")
+#         content = json.dumps(result, ensure_ascii=False)
+#         write_raw_json(
+#             client=client,
+#             bucket_name=BUCKET_NAME,
+#             source_name="twse_daily",
+#             target_date=target_date,
+#             content=content,
+#         )
+#     else:
+#         print("⚠️ 無資料可寫入,略過此次上傳")

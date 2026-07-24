@@ -34,9 +34,8 @@ def render(client, start_date_filter):
     compare_query = f"""
     SELECT ip.trade_date, ip.weighted_avg_price, fg.fear_greed_score
     FROM `stockpulse_marts.fact_industry_price` ip
-    LEFT JOIN `stockpulse_marts.dim_industry` d ON ip.industry_code = d.industry_code
     LEFT JOIN `stockpulse_marts.fact_fear_greed` fg ON ip.trade_date = fg.index_date
-    WHERE d.industry_name = '{selected_industry}'
+    WHERE ip.industry_name = '{selected_industry}'
       AND ip.market = 'TWSE'
       AND ip.trade_date >= '{start_date_filter}'
     ORDER BY ip.trade_date

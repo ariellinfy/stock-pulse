@@ -6,19 +6,12 @@ def render(client):
     st.subheader("今日市場總覽")
 
     industry_query = """
-    WITH ranked AS (
-        SELECT trade_date, industry_code, weighted_avg_price,
-               LAG(weighted_avg_price) OVER (PARTITION BY industry_code ORDER BY trade_date) AS prev_price
-        FROM `stockpulse_marts.fact_industry_price`
-        WHERE market = 'TWSE'
-    )
-    SELECT r.trade_date, r.industry_code, d.industry_name, r.weighted_avg_price,
-           ROUND((r.weighted_avg_price - r.prev_price) / NULLIF(r.prev_price, 0) * 100, 2) AS daily_return_pct
-    FROM ranked r
-    LEFT JOIN `stockpulse_marts.dim_industry` d ON r.industry_code = d.industry_code
-    WHERE r.trade_date = (SELECT MAX(trade_date) FROM ranked)
-      AND r.prev_price IS NOT NULL
-      AND d.industry_name IS NOT NULL
+    SELECT trade_date, industry_code, industry_name, weighted_avg_price, daily_return_pct
+    FROM `stockpulse_marts.fact_industry_price`
+    WHERE market = 'TWSE'
+      AND trade_date = (SELECT MAX(trade_date) FROM `stockpulse_marts.fact_industry_price` WHERE market = 'TWSE')
+      AND daily_return_pct IS NOT NULL
+      AND industry_name IS NOT NULL
     ORDER BY daily_return_pct DESC
     """
     industry_df = client.query(industry_query).to_dataframe()
@@ -71,3 +64,4 @@ def render(client):
         st.warning("目前無產業排行資料")
 
     st.caption("目前僅顯示上市(TWSE)產業排行,上櫃(TPEx)因歷史資料加權方式限制(詳見 README),暫不納入排行比較")
+    st.caption("⚠️ 產業加權指數採成交金額加權,權重可能集中於少數大型股,單日大幅波動不代表產業內多數股票同步表現")

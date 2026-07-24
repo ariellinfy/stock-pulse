@@ -11,11 +11,9 @@ CNN Fear & Greed Index 爬蟲
 import sys
 import json
 import requests
-from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 
@@ -78,22 +76,24 @@ def fetch_fear_greed_full_history(start_date: date) -> dict | None:
     return fetch_fear_greed(start_date)  # 底層邏輯完全相同,語意上獨立命名方便呼叫端理解意圖
 
 
-if __name__ == "__main__":
-    from datetime import timedelta
+# if __name__ == "__main__":
+#     from datetime import date
+#     from datetime import timedelta
+#     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
-    start_date = date.today() - timedelta(days=3)
-    result = fetch_fear_greed(start_date)
+#     start_date = date.today() - timedelta(days=3)
+#     result = fetch_fear_greed(start_date)
 
-    if result:
-        client = get_gcs_client()
+#     if result:
+#         client = get_gcs_client()
 
-        content = json.dumps(result, ensure_ascii=False)
-        write_raw_json(
-            client=client,
-            bucket_name=BUCKET_NAME,
-            source_name="fear_greed",
-            target_date=date.today(),
-            content=content,
-        )
-    else:
-        print("⚠️ 無資料可寫入,略過此次上傳")
+#         content = json.dumps(result, ensure_ascii=False)
+#         write_raw_json(
+#             client=client,
+#             bucket_name=BUCKET_NAME,
+#             source_name="fear_greed",
+#             target_date=date.today(),
+#             content=content,
+#         )
+#     else:
+#         print("⚠️ 無資料可寫入,略過此次上傳")
