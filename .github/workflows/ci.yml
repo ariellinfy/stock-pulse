@@ -1,0 +1,44 @@
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install lint tools
+        run: pip install flake8
+      - name: Run flake8
+        run: flake8 scrapers/ shared/ scripts/ spark/ --max-line-length=120 --extend-ignore=E203,W503,E402 --exclude=_exploration_archive,_planned
+
+  dbt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dbt
+        run: pip install dbt-bigquery
+      - name: Create fake profiles.yml (dbt parse 不需要真實連線)
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << 'EOF'
+          stock_pulse:
+            target: dev
+            outputs:
+              dev:
+                type: bigquery
+                method: service-account
+                keyfile: /tmp/nonexistent-key.json
+                project: fake-project-id
+                dataset: stockpulse_staging
+                threads: 4
+                location: us-west1
+          EOF
+      - name: dbt deps
+        working-directory: dbt
+        run: dbt deps
+      - name: dbt parse
+        working-directory: dbt
+        run: dbt parse --no-partial-parse
