@@ -18,8 +18,7 @@ from pyspark.sql import functions as F
 
 def clean_fear_greed_history(df):
     df = df.withColumn(
-        "dt",
-        F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
+        "dt", F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
     )
     df = df.withColumnRenamed("y", "score")
     df = df.withColumnRenamed("rating", "fear_greed_rating")
@@ -30,12 +29,17 @@ def clean_fear_greed_history(df):
 
 def explore():
     spark = (
-        SparkSession.builder
-        .appName("fear-greed-clean-test")
+        SparkSession.builder.appName("fear-greed-clean-test")
         .master("local[*]")
         .config("spark.hadoop.google.cloud.auth.service.account.enable", "true")
-        .config("spark.hadoop.google.cloud.auth.service.account.json.keyfile", "/app/secrets/gcp-sa-key.json")
-        .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+        .config(
+            "spark.hadoop.google.cloud.auth.service.account.json.keyfile",
+            "/app/secrets/gcp-sa-key.json",
+        )
+        .config(
+            "spark.hadoop.fs.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+        )
         .getOrCreate()
     )
 
@@ -43,7 +47,9 @@ def explore():
     raw_path = f"gs://{bucket_name}/raw/fear_greed_history/range=full/data.json"
     fg_raw = spark.read.option("multiline", "true").json(raw_path)
 
-    fg_data = fg_raw.select(F.explode(F.col("fear_and_greed_historical.data")).alias("record"))
+    fg_data = fg_raw.select(
+        F.explode(F.col("fear_and_greed_historical.data")).alias("record")
+    )
     fg_flat = fg_data.select("record.x", "record.y", "record.rating")
 
     cleaned = clean_fear_greed_history(fg_flat)
@@ -53,8 +59,7 @@ def explore():
 
     # 在轉換出 dt 之後、去重之前,先看看有沒有重複的 dt
     fg_with_dt = fg_flat.withColumn(
-        "dt",
-        F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
+        "dt", F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
     )
 
     dt_counts = fg_with_dt.groupBy("dt").count().filter(F.col("count") > 1)
@@ -64,7 +69,9 @@ def explore():
     # 如果有重複,把那幾天的完整原始資料印出來看
     if dt_counts.count() > 0:
         duplicate_dates = [row["dt"] for row in dt_counts.collect()]
-        fg_with_dt.filter(F.col("dt").isin(duplicate_dates)).orderBy("dt", "x").show(20, truncate=False)
+        fg_with_dt.filter(F.col("dt").isin(duplicate_dates)).orderBy("dt", "x").show(
+            20, truncate=False
+        )
 
     spark.stop()
 

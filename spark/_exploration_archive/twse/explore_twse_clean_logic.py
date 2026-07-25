@@ -20,7 +20,14 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
 from spark.common.schemas import TWSE_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
-from spark.jobs.clean_stock import clean_twse, clean_yahoo_history, unify_twse, unify_yahoo_tpex, filter_official_stocks, clean_fear_greed_history
+from spark.jobs.clean_stock import (
+    clean_twse,
+    clean_yahoo_history,
+    unify_twse,
+    unify_yahoo_tpex,
+    filter_official_stocks,
+    clean_fear_greed_history,
+)
 
 
 def explode_daily_data(raw_df):
@@ -30,7 +37,9 @@ def explode_daily_data(raw_df):
     """
     exploded = raw_df.select(
         F.col("dt"),
-        F.explode(F.col("data")).alias("row_values")  # 把 data 陣列展開,一個陣列元素變成一列
+        F.explode(F.col("data")).alias(
+            "row_values"
+        ),  # 把 data 陣列展開,一個陣列元素變成一列
     )
     return exploded
 
@@ -40,7 +49,9 @@ def flatten_to_columns(exploded_df):
     把 row_values 陣列(16 個位置固定的值),依照 TWSE_RAW_SCHEMA 的欄位順序,
     拆成獨立的欄位,對應到跟本機探索階段完全一致的 schema。
     """
-    field_names = [f.name for f in TWSE_RAW_SCHEMA.fields]  # 取得我們定義好的 16 個欄位名稱,順序一致
+    field_names = [
+        f.name for f in TWSE_RAW_SCHEMA.fields
+    ]  # 取得我們定義好的 16 個欄位名稱,順序一致
 
     select_exprs = [F.col("dt")]
     for i, name in enumerate(field_names):
@@ -66,7 +77,11 @@ def explore():
     twse_industry_records = load_industry_list_from_gcs(BUCKET_NAME, "TWSE")
     twse_official_ids = [r["公司代號"] for r in twse_industry_records]
 
-    twse_raw = spark.read.option("multiline", "true").option("pathGlobFilter", "data.json").json(f"gs://{BUCKET_NAME}/raw/twse_daily/")
+    twse_raw = (
+        spark.read.option("multiline", "true")
+        .option("pathGlobFilter", "data.json")
+        .json(f"gs://{BUCKET_NAME}/raw/twse_daily/")
+    )
     twse_exploded = explode_daily_data(twse_raw)
     twse_flattened = flatten_to_columns(twse_exploded)
     twse_cleaned = clean_twse(twse_flattened)

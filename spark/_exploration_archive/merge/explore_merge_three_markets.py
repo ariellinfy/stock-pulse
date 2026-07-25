@@ -17,7 +17,17 @@ from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from spark.common.schemas import TWSE_RAW_SCHEMA, TPEX_RAW_SCHEMA
-from spark.jobs.clean_stock import clean_twse, clean_tpex, clean_yahoo_history, unify_twse, unify_tpex, unify_yahoo_tpex, merge_markets, filter_official_stocks, add_trade_date
+from spark.jobs.clean_stock import (
+    clean_twse,
+    clean_tpex,
+    clean_yahoo_history,
+    unify_twse,
+    unify_tpex,
+    unify_yahoo_tpex,
+    merge_markets,
+    filter_official_stocks,
+    add_trade_date,
+)
 
 
 def verify_schema_compatibility(twse_unified, tpex_unified, yahoo_unified):
@@ -25,12 +35,20 @@ def verify_schema_compatibility(twse_unified, tpex_unified, yahoo_unified):
     驗證三個來源統一後的 schema 是否真的能合併。
     比對欄位名稱集合是否一致,型態是否相容,不依賴「應該沒問題」的假設。
     """
-    twse_schema = {f.name: f.dataType.simpleString() for f in twse_unified.schema.fields}
-    tpex_schema = {f.name: f.dataType.simpleString() for f in tpex_unified.schema.fields}
-    yahoo_schema = {f.name: f.dataType.simpleString() for f in yahoo_unified.schema.fields}
+    twse_schema = {
+        f.name: f.dataType.simpleString() for f in twse_unified.schema.fields
+    }
+    tpex_schema = {
+        f.name: f.dataType.simpleString() for f in tpex_unified.schema.fields
+    }
+    yahoo_schema = {
+        f.name: f.dataType.simpleString() for f in yahoo_unified.schema.fields
+    }
 
     print("=== 欄位名稱是否一致 ===")
-    print(f"TWSE 欄位數: {len(twse_schema)}, TPEx 欄位數: {len(tpex_schema)}, Yahoo 欄位數: {len(yahoo_schema)}")
+    print(
+        f"TWSE 欄位數: {len(twse_schema)}, TPEx 欄位數: {len(tpex_schema)}, Yahoo 欄位數: {len(yahoo_schema)}"
+    )
     print(f"TWSE - TPEx 欄位差異: {set(twse_schema) ^ set(tpex_schema)}")
     print(f"TWSE - Yahoo 欄位差異: {set(twse_schema) ^ set(yahoo_schema)}")
 
@@ -39,13 +57,19 @@ def verify_schema_compatibility(twse_unified, tpex_unified, yahoo_unified):
     for field in sorted(common_fields):
         types = {twse_schema[field], tpex_schema[field], yahoo_schema[field]}
         if len(types) > 1:
-            print(f"⚠️ 欄位 '{field}' 型態不一致: TWSE={twse_schema[field]}, TPEx={tpex_schema[field]}, Yahoo={yahoo_schema[field]}")
+            print(
+                f"⚠️ 欄位 '{field}' 型態不一致: TWSE={twse_schema[field]}, TPEx={tpex_schema[field]}, Yahoo={yahoo_schema[field]}"
+            )
 
     print("\n✅ 檢查完成,若上方沒有 ⚠️ 且欄位差異為空集合,代表可以安全合併")
 
 
 def explore():
-    spark = SparkSession.builder.appName("stock-pulse-yahoo-local-test").master("local[*]").getOrCreate()
+    spark = (
+        SparkSession.builder.appName("stock-pulse-yahoo-local-test")
+        .master("local[*]")
+        .getOrCreate()
+    )
 
     # twse
     with open("local_output/twse_daily_2026-07-09.json", "r", encoding="utf-8") as f:
@@ -67,7 +91,7 @@ def explore():
     #     bad_count = twse_df.filter(F.trim(F.col(col_name)) == "--").count()
     #     if bad_count > 0:
     #         print(f"{col_name}: {bad_count} 筆是 '--'")
-    
+
     cleaned_twse = clean_twse(twse_df)
     cleaned_twse = add_trade_date(cleaned_twse, "2026-07-09")
     unified_twse = unify_twse(cleaned_twse)
@@ -108,7 +132,9 @@ def explore():
     unified_tpex = filter_official_stocks(unified_tpex, tpex_official_ids)
 
     # yahoo
-    yahoo_df = spark.read.option("multiline", "true").json("local_output/yahoo_sample/stock_id_6026.json")
+    yahoo_df = spark.read.option("multiline", "true").json(
+        "local_output/yahoo_sample/stock_id_6026.json"
+    )
 
     cleaned_yahoo = clean_yahoo_history(yahoo_df)
     unified_yahoo = unify_yahoo_tpex(cleaned_yahoo)

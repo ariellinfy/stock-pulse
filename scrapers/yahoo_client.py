@@ -30,7 +30,9 @@ def build_yahoo_ticker(stock_id: str, market: str) -> str:
     return f"{stock_id}{suffix}"
 
 
-def save_failed_list(failed: list[str], filepath: str = "local_output/yahoo_failed_stocks.json"):
+def save_failed_list(
+    failed: list[str], filepath: str = "local_output/yahoo_failed_stocks.json"
+):
     """把失敗清單存成本地檔案,方便之後重跑補抓。"""
     Path(filepath).parent.mkdir(exist_ok=True)
     with open(filepath, "w", encoding="utf-8") as f:
@@ -60,7 +62,8 @@ def fetch_yahoo_history(
         try:
             ticker = yf.Ticker(ticker_symbol)
             hist = ticker.history(
-                start=start_date.isoformat(), end=yahoo_end.isoformat())
+                start=start_date.isoformat(), end=yahoo_end.isoformat()
+            )
 
             if hist.empty:
                 print(f"⚠️ {ticker_symbol} 無資料(可能是新股、下市或非交易區間)")
@@ -69,16 +72,18 @@ def fetch_yahoo_history(
             # 把 DatetimeIndex 轉成單純的日期字串,並保留原始股票代號/市場資訊
             records = []
             for idx, row in hist.iterrows():
-                records.append({
-                    "stock_id": stock_id,
-                    "market": market,
-                    "trade_date": idx.strftime("%Y-%m-%d"),
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "volume": int(row["Volume"]),  # 成交量是整數股數,用 int 更準確
-                })
+                records.append(
+                    {
+                        "stock_id": stock_id,
+                        "market": market,
+                        "trade_date": idx.strftime("%Y-%m-%d"),
+                        "open": float(row["Open"]),
+                        "high": float(row["High"]),
+                        "low": float(row["Low"]),
+                        "close": float(row["Close"]),
+                        "volume": int(row["Volume"]),  # 成交量是整數股數,用 int 更準確
+                    }
+                )
 
             print(f"✅ {ticker_symbol} 取得 {len(records)} 筆資料")
             return records
@@ -126,7 +131,7 @@ def fetch_batch(
         # 每支股票之間都要間隔,即使失敗也要等,避免連續失敗時反而打更快
         time.sleep(delay_seconds)
 
-    print(f"\n=== 批次完成 ===")
+    print("\n=== 批次完成 ===")
     print(f"成功: {len(success)} / {total}")
     print(f"失敗: {len(failed)} 檔: {failed}")
 

@@ -18,37 +18,46 @@ from shared.utils import BUCKET_NAME
 from spark.common.spark_session import build_spark_session
 
 
-def detect_clean_layer_gaps(spark, bucket_name: str, twse_industry_records: list[dict], gap_threshold: int = 10):
+def detect_clean_layer_gaps(
+    spark, bucket_name: str, twse_industry_records: list[dict], gap_threshold: int = 10
+):
     """
     gap_threshold: 只回報 gap 超過此門檻的日子(預設 10,排除清洗過程正常的個位數落差,如個股停牌)。
     """
-    df = spark.read.parquet(
-        f"gs://{bucket_name}/clean/stock_daily/").filter(F.col("market") == "TWSE")
+    df = spark.read.parquet(f"gs://{bucket_name}/clean/stock_daily/").filter(
+        F.col("market") == "TWSE"
+    )
 
     listing_dates = spark.createDataFrame(
         [(r["公司代號"], r["上市日期"]) for r in twse_industry_records],
-        ["stock_id", "listing_date_raw"]
+        ["stock_id", "listing_date_raw"],
     ).withColumn("listing_date", F.to_date(F.col("listing_date_raw"), "yyyyMMdd"))
 
     daily_counts = df.groupBy("dt").agg(
-        F.countDistinct("stock_id").alias("actual_count"))
+        F.countDistinct("stock_id").alias("actual_count")
+    )
 
-    trading_days = [row["dt"]
-        for row in daily_counts.select("dt").distinct().collect()]
+    trading_days = [row["dt"] for row in daily_counts.select("dt").distinct().collect()]
     expected_counts = [
-        Row(dt=day, expected_count_adjusted=listing_dates.filter(
-            F.col("listing_date") <= F.to_date(F.lit(day))).count())
+        Row(
+            dt=day,
+            expected_count_adjusted=listing_dates.filter(
+                F.col("listing_date") <= F.to_date(F.lit(day))
+            ).count(),
+        )
         for day in trading_days
     ]
     expected_df = spark.createDataFrame(expected_counts)
 
     result = daily_counts.join(expected_df, on="dt")
-    result = result.withColumn("gap", F.col(
-        "expected_count_adjusted") - F.col("actual_count"))
+    result = result.withColumn(
+        "gap", F.col("expected_count_adjusted") - F.col("actual_count")
+    )
 
     gaps = result.filter(F.col("gap") > gap_threshold).orderBy(F.desc("gap"))
     print(
-        f"clean 層,gap > {gap_threshold} 的交易日數: {gaps.count()} / {result.count()}")
+        f"clean 層,gap > {gap_threshold} 的交易日數: {gaps.count()} / {result.count()}"
+    )
     gaps.show(30, truncate=False)
 
     return gaps

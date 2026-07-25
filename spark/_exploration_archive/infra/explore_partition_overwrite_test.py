@@ -11,7 +11,9 @@ from pyspark.sql import SparkSession
 
 
 def explore():
-    spark = SparkSession.builder.appName("partition-test").master("local[*]").getOrCreate()
+    spark = (
+        SparkSession.builder.appName("partition-test").master("local[*]").getOrCreate()
+    )
     spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
 
     # 第一批: 模擬 TWSE 資料,涵蓋 2 天
@@ -20,7 +22,7 @@ def explore():
             ("2024-07-01", "1101", "TWSE", 23.1),
             ("2024-07-02", "1101", "TWSE", 23.5),
         ],
-        ["dt", "stock_id", "market", "close_price"]
+        ["dt", "stock_id", "market", "close_price"],
     )
 
     # 第二批: 模擬 Yahoo TPEx 資料,涵蓋同樣 2 天(但不同股票)
@@ -29,7 +31,7 @@ def explore():
             ("2024-07-01", "6026", "TPEx", 12.37),
             ("2024-07-02", "6026", "TPEx", 12.45),
         ],
-        ["dt", "stock_id", "market", "close_price"]
+        ["dt", "stock_id", "market", "close_price"],
     )
 
     # print("=== 情境 A: 分開寫入(驗證是否會互相覆蓋)===")
@@ -39,7 +41,7 @@ def explore():
     # result_a = spark.read.parquet(output_path)
     # print(f"分開寫入後,總筆數: {result_a.count()}")
     # result_a.orderBy("dt", "market").show()
-    
+
     print("\n=== 情境 B: 先合併,再一次寫出(正確做法)===")
     combined_fake = twse_fake.unionByName(yahoo_fake)
 

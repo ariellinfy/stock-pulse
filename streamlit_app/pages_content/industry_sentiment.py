@@ -12,18 +12,24 @@ def render(client, start_date_filter):
 
     if "selected_industry" not in st.session_state:
         st.session_state.selected_industry = (
-            "半導體業" if "半導體業" in available_industries["industry_name"].values
+            "半導體業"
+            if "半導體業" in available_industries["industry_name"].values
             else available_industries.iloc[0]["industry_name"]
         )
 
     industries_list = available_industries["industry_name"].tolist()
     cols_per_row = 7
     for i in range(0, len(industries_list), cols_per_row):
-        row_names = industries_list[i:i + cols_per_row]
+        row_names = industries_list[i : i + cols_per_row]
         row_cols = st.columns(cols_per_row)
         for col, name in zip(row_cols, row_names):
             is_selected = st.session_state.selected_industry == name
-            if col.button(name, use_container_width=True, type="primary" if is_selected else "secondary", key=f"industry_btn_{name}"):
+            if col.button(
+                name,
+                use_container_width=True,
+                type="primary" if is_selected else "secondary",
+                key=f"industry_btn_{name}",
+            ):
                 if st.session_state.selected_industry != name:
                     st.session_state.selected_industry = name
                     st.rerun()
@@ -44,8 +50,24 @@ def render(client, start_date_filter):
 
     if not compare_df.empty:
         fig2 = make_subplots(specs=[[{"secondary_y": True}]])
-        fig2.add_trace(go.Scatter(x=compare_df["trade_date"], y=compare_df["weighted_avg_price"], name=f"{selected_industry}指數", line=dict(color="blue")), secondary_y=False)
-        fig2.add_trace(go.Scatter(x=compare_df["trade_date"], y=compare_df["fear_greed_score"], name="Fear & Greed", line=dict(color="orange")), secondary_y=True)
+        fig2.add_trace(
+            go.Scatter(
+                x=compare_df["trade_date"],
+                y=compare_df["weighted_avg_price"],
+                name=f"{selected_industry}指數",
+                line=dict(color="blue"),
+            ),
+            secondary_y=False,
+        )
+        fig2.add_trace(
+            go.Scatter(
+                x=compare_df["trade_date"],
+                y=compare_df["fear_greed_score"],
+                name="Fear & Greed",
+                line=dict(color="orange"),
+            ),
+            secondary_y=True,
+        )
         fig2.update_yaxes(title_text=f"{selected_industry}加權指數", secondary_y=False)
         fig2.update_yaxes(title_text="Fear & Greed 分數", secondary_y=True)
         fig2.update_layout(height=500)

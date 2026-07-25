@@ -4,6 +4,7 @@ import pandas as pd
 
 URL = "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv"
 
+
 def explore():
     resp = requests.get(URL, timeout=15)
     resp.raise_for_status()
@@ -28,6 +29,7 @@ def explore():
     print(f"筆數: {len(df)}")
     print("\n前 3 筆:")
     print(df.head(3))
+
 
 if __name__ == "__main__":
     explore()

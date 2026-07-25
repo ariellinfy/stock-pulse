@@ -10,8 +10,7 @@ from pyspark.sql import SparkSession
 
 def explore():
     spark = (
-        SparkSession.builder
-        .appName("stock-pulse-explore")
+        SparkSession.builder.appName("stock-pulse-explore")
         .master("local[*]")  # 本機模式,用所有可用的 CPU 核心
         .getOrCreate()
     )
@@ -21,8 +20,7 @@ def explore():
 
     # 建一個最小的測試 DataFrame,確認基本運算跟顯示都正常
     df = spark.createDataFrame(
-        [("2330", 590.0), ("2317", 105.5)],
-        ["stock_id", "close_price"]
+        [("2330", 590.0), ("2317", 105.5)], ["stock_id", "close_price"]
     )
     df.show()
 

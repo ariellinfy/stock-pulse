@@ -13,7 +13,12 @@ from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_partitioned, raw_blob_exists_partitioned
+from shared.utils import (
+    BUCKET_NAME,
+    get_gcs_client,
+    write_raw_partitioned,
+    raw_blob_exists_partitioned,
+)
 from scrapers.fear_greed_client import fetch_fear_greed_full_history
 
 SOURCE_NAME = "fear_greed_history"
@@ -24,7 +29,9 @@ def backfill_fear_greed(start_date: date):
     client = get_gcs_client()
 
     # 即使不太需要,仍比照其他回補腳本加上存在性檢查,維持一致的操作習慣
-    if raw_blob_exists_partitioned(client, BUCKET_NAME, SOURCE_NAME, "range", PARTITION_VALUE):
+    if raw_blob_exists_partitioned(
+        client, BUCKET_NAME, SOURCE_NAME, "range", PARTITION_VALUE
+    ):
         print("⏭️  Fear & Greed 歷史資料已存在,跳過(如需強制更新,請先手動刪除該檔案)")
         return
 
@@ -34,8 +41,9 @@ def backfill_fear_greed(start_date: date):
         return
 
     content = json.dumps(result, ensure_ascii=False)
-    write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME,
-                          "range", PARTITION_VALUE, content)
+    write_raw_partitioned(
+        client, BUCKET_NAME, SOURCE_NAME, "range", PARTITION_VALUE, content
+    )
 
 
 # if __name__ == "__main__":
@@ -47,8 +55,7 @@ if __name__ == "__main__":
     from datetime import datetime
 
     parser = argparse.ArgumentParser(description="Fear & Greed 歷史資料回補")
-    parser.add_argument("--start-date", required=True,
-                        help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
     args = parser.parse_args()
 
     start = datetime.strptime(args.start_date, "%Y-%m-%d").date()

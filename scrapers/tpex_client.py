@@ -20,9 +20,25 @@ TPEX_URL = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/st
 
 # 已驗證過的真實欄位定義(2026-07-09 測試結果)
 EXPECTED_FIELDS = [
-    "代號", "名稱", "收盤", "漲跌", "開盤", "最高", "最低", "均價",
-    "成交股數", "成交金額(元)", "成交筆數", "最後買價", "最後買量(張數)",
-    "最後賣價", "最後賣量(張數)", "發行股數", "次日 參考價", "次日 漲停價", "次日 跌停價",
+    "代號",
+    "名稱",
+    "收盤",
+    "漲跌",
+    "開盤",
+    "最高",
+    "最低",
+    "均價",
+    "成交股數",
+    "成交金額(元)",
+    "成交筆數",
+    "最後買價",
+    "最後買量(張數)",
+    "最後賣價",
+    "最後賣量(張數)",
+    "發行股數",
+    "次日 參考價",
+    "次日 漲停價",
+    "次日 跌停價",
 ]
 
 
@@ -74,20 +90,23 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
     actual_fields = table.get("fields", [])
     rows = table.get("data", [])
 
-    actual_roc_date = table.get("date")  # 民國格式,用來確認實際拿到的是哪一天，例如 '115/07/09'
-    actual_trade_date = roc_to_gregorian(
-        actual_roc_date) if actual_roc_date else None
+    actual_roc_date = table.get(
+        "date"
+    )  # 民國格式,用來確認實際拿到的是哪一天，例如 '115/07/09'
+    actual_trade_date = roc_to_gregorian(actual_roc_date) if actual_roc_date else None
 
     fields_ok = validate_fields(actual_fields)
-    print(f"✅ TPEx 實際回傳日期: {actual_trade_date},取得 {len(rows)} 筆資料"
-          f"(欄位結構{'正常' if fields_ok else '⚠️ 已變動,見上方警告'})")
+    print(
+        f"✅ TPEx 實際回傳日期: {actual_trade_date},取得 {len(rows)} 筆資料"
+        f"(欄位結構{'正常' if fields_ok else '⚠️ 已變動,見上方警告'})"
+    )
 
     return {
         "fields": actual_fields,
         "data": rows,
         "fields_match_expected": fields_ok,
-        "actual_trade_date": actual_trade_date,       # 西元,給下游用
-        "actual_trade_date_roc": actual_roc_date,      # 民國,保留原始證據
+        "actual_trade_date": actual_trade_date,  # 西元,給下游用
+        "actual_trade_date_roc": actual_roc_date,  # 民國,保留原始證據
     }
 
 

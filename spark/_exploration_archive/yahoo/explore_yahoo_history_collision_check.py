@@ -47,29 +47,34 @@ def unify_yahoo_tpex(df):
 def explore():
     # 只讀單一分區資料夾,範圍小,速度快,專門驗證欄位衝突的實際結果
     spark = (
-        SparkSession.builder
-        .appName("stock-pulse-yahoo-collision-check")
+        SparkSession.builder.appName("stock-pulse-yahoo-collision-check")
         .master("local[*]")
         .config("spark.jars", "/home/fy/spark_jars/gcs-connector-hadoop3-latest.jar")
         .config("spark.hadoop.google.cloud.auth.service.account.enable", "true")
-        .config("spark.hadoop.google.cloud.auth.service.account.json.keyfile", "/home/fy/stock-pulse/secrets/gcp-sa-key.json")
-        .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+        .config(
+            "spark.hadoop.google.cloud.auth.service.account.json.keyfile",
+            "/home/fy/stock-pulse/secrets/gcp-sa-key.json",
+        )
+        .config(
+            "spark.hadoop.fs.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+        )
         .getOrCreate()
     )
 
-#     raw_path = "gs://stock-pulse-data-lake/raw/yahoo_tpex_history/"
-#     raw_df = spark.read.option("multiline", "true").json(raw_path)
+    #     raw_path = "gs://stock-pulse-data-lake/raw/yahoo_tpex_history/"
+    #     raw_df = spark.read.option("multiline", "true").json(raw_path)
 
-#     cleaned_yahoo = clean_yahoo_history(raw_df)
-#     unified_yahoo = unify_yahoo_tpex(cleaned_yahoo)
+    #     cleaned_yahoo = clean_yahoo_history(raw_df)
+    #     unified_yahoo = unify_yahoo_tpex(cleaned_yahoo)
 
-#     print(f"轉換後總筆數: {unified_yahoo.count()}")
-#     unified_yahoo.printSchema()
-#     unified_yahoo.filter(F.col("stock_id") == "6026").show(5, truncate=False)
+    #     print(f"轉換後總筆數: {unified_yahoo.count()}")
+    #     unified_yahoo.printSchema()
+    #     unified_yahoo.filter(F.col("stock_id") == "6026").show(5, truncate=False)
 
-#     # print(f"讀取到 {raw_df.count()} 個檔案(每列代表一支股票,還未展開每日資料)")
-#     # raw_df.printSchema()
-#     # raw_df.show(3, truncate=False)
+    #     # print(f"讀取到 {raw_df.count()} 個檔案(每列代表一支股票,還未展開每日資料)")
+    #     # raw_df.printSchema()
+    #     # raw_df.show(3, truncate=False)
 
     single_path = "gs://stock-pulse-data-lake/raw/yahoo_tpex_history/stock_id=6026/"
     raw_df = spark.read.option("multiline", "true").json(single_path)

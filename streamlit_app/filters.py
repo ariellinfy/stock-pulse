@@ -12,7 +12,11 @@ def render_date_range_selector() -> date:
     cols = st.columns(len(RANGE_OPTIONS))
     for i, opt in enumerate(RANGE_OPTIONS):
         is_selected = st.session_state.range_option == opt
-        if cols[i].button(opt, use_container_width=True, type="primary" if is_selected else "secondary"):
+        if cols[i].button(
+            opt,
+            use_container_width=True,
+            type="primary" if is_selected else "secondary",
+        ):
             if st.session_state.range_option != opt:
                 st.session_state.range_option = opt
                 st.rerun()

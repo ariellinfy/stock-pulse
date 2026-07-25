@@ -12,7 +12,9 @@ def test_normalize_stock_id():
     for raw_input, expected in cases:
         result = normalize_stock_id(raw_input)
         status = "✅" if result == expected else "❌"
-        print(f"{status} normalize_stock_id({raw_input!r}) = {result}  (預期: {expected})")
+        print(
+            f"{status} normalize_stock_id({raw_input!r}) = {result}  (預期: {expected})"
+        )
 
 
 if __name__ == "__main__":

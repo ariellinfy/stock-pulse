@@ -65,7 +65,8 @@ def fetch_fear_greed(start_date: date) -> dict | None:
 
     fg = payload["fear_and_greed"]
     print(
-        f"✅ 取得 Fear & Greed 即時值: score={fg['score']:.2f}, rating={fg['rating']}")
+        f"✅ 取得 Fear & Greed 即時值: score={fg['score']:.2f}, rating={fg['rating']}"
+    )
 
     return payload  # 忠實回傳整包,不篩選欄位
 
@@ -75,7 +76,9 @@ def fetch_fear_greed_full_history(start_date: date) -> dict | None:
     一次性抓取從 start_date 到今天的完整 Fear & Greed 歷史。
     用於 2.3 歷史回補,只需呼叫一次,不需要迴圈。
     """
-    return fetch_fear_greed(start_date)  # 底層邏輯完全相同,語意上獨立命名方便呼叫端理解意圖
+    return fetch_fear_greed(
+        start_date
+    )  # 底層邏輯完全相同,語意上獨立命名方便呼叫端理解意圖
 
 
 # if __name__ == "__main__":

@@ -12,13 +12,17 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.docker.operators.docker import DockerOperator
-from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
-from airflow.providers.google.cloud.operators.bigquery import BigQueryDeleteTableOperator
+from airflow.providers.google.cloud.transfers.gcs_to_bigquery import (
+    GCSToBigQueryOperator,
+)
+from airflow.providers.google.cloud.operators.bigquery import (
+    BigQueryDeleteTableOperator,
+)
 
 from docker.types import Mount
 
 sys.path.insert(0, "/opt/airflow/project")
-    
+
 
 def run_fear_greed_scraper(**context):
     from scrapers.fear_greed_client import fetch_fear_greed
@@ -69,7 +73,12 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[
-            Mount(source="/home/fy/stock-pulse/secrets", target="/app/secrets", type="bind", read_only=True),
+            Mount(
+                source="/home/fy/stock-pulse/secrets",
+                target="/app/secrets",
+                type="bind",
+                read_only=True,
+            ),
         ],
         environment={
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
@@ -78,7 +87,7 @@ with DAG(
     )
 
     project_id = os.environ.get("GCP_PROJECT_ID")
-    
+
     delete_today_fg_partition = BigQueryDeleteTableOperator(
         task_id="delete_today_fg_partition",
         gcp_conn_id="google_cloud_default",
@@ -93,7 +102,9 @@ with DAG(
         task_id="load_fear_greed_to_bq",
         gcp_conn_id="google_cloud_default",
         bucket="stock-pulse-data-lake",
-        source_objects=["clean/fear_greed_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"],
+        source_objects=[
+            "clean/fear_greed_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"
+        ],
         destination_project_dataset_table=f"{project_id}.stockpulse_staging.raw_fear_greed",
         source_format="PARQUET",
         write_disposition="WRITE_APPEND",

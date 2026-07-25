@@ -18,7 +18,12 @@ from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_partitioned, raw_blob_exists_partitioned
+from shared.utils import (
+    BUCKET_NAME,
+    get_gcs_client,
+    write_raw_partitioned,
+    raw_blob_exists_partitioned,
+)
 from scrapers.yahoo_client import fetch_yahoo_history
 
 SOURCE_NAME = "yahoo_tpex_history"
@@ -33,11 +38,12 @@ def load_tpex_stock_list(client, bucket_name: str) -> list[str]:
     # 直接讀最近一次存的那份(還記得我們之前討論過,這份清單本質是「快照」,
     # 下游只在乎最新一份)
     bucket = client.bucket(bucket_name)
-    blobs = list(bucket.list_blobs(prefix=f"raw/industry_list_tpex/"))
+    blobs = list(bucket.list_blobs(prefix="raw/industry_list_tpex/"))
 
     if not blobs:
         raise RuntimeError(
-            "找不到 industry_list_tpex 的任何資料,請先執行 industry_client.py")
+            "找不到 industry_list_tpex 的任何資料,請先執行 industry_client.py"
+        )
 
     # 取最新的一個分區(路徑格式: raw/industry_list_tpex/dt=YYYY-MM-DD/data.json)
     latest_blob = sorted(blobs, key=lambda b: b.name)[-1]
@@ -59,7 +65,9 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 
     for i, stock_id in enumerate(stock_ids, start=1):
         # 斷點續跑:整支股票的資料存不存在
-        if raw_blob_exists_partitioned(client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id):
+        if raw_blob_exists_partitioned(
+            client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id
+        ):
             print(f"[{i}/{len(stock_ids)}] ⏭️  {stock_id} 已存在,跳過")
             skipped += 1
             continue
@@ -69,15 +77,16 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 
         if result:
             content = json.dumps(result, ensure_ascii=False)
-            write_raw_partitioned(client, BUCKET_NAME,
-                                  SOURCE_NAME, "stock_id", stock_id, content)
+            write_raw_partitioned(
+                client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id, content
+            )
             succeeded += 1
         else:
             failed.append(stock_id)
 
         time.sleep(delay_seconds)
 
-    print(f"\n=== TPEx Yahoo 回補完成 ===")
+    print("\n=== TPEx Yahoo 回補完成 ===")
     print(f"成功: {succeeded} / 跳過(已存在): {skipped} / 失敗: {len(failed)}")
     if failed:
         print(f"失敗清單: {failed}")

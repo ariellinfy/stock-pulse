@@ -22,7 +22,8 @@ headers = {"User-Agent": "Mozilla/5.0"}
 resp = requests.get(
     "https://www.twse.com.tw/exchangeReport/MI_INDEX",
     params={"response": "json", "date": "20251217", "type": "ALLBUT0999"},
-    headers=headers, timeout=15
+    headers=headers,
+    timeout=15,
 )
 live_data = resp.json()
 live_rows = live_data["tables"][8]["data"]
@@ -52,9 +53,9 @@ missing_ids = list(live_ids - stored_ids)  # 完整的差集,不只是前 15 筆
 print(f"總遺漏代號數: {len(missing_ids)}")
 
 # 檢查格式規律: 純數字4碼 / 純數字5碼 / 帶字母後綴
-pure_4digit = [s for s in missing_ids if re.match(r'^\d{4}$', s)]
-pure_5digit = [s for s in missing_ids if re.match(r'^\d{5}$', s)]
-with_letter = [s for s in missing_ids if re.search(r'[A-Za-z]', s)]
+pure_4digit = [s for s in missing_ids if re.match(r"^\d{4}$", s)]
+pure_5digit = [s for s in missing_ids if re.match(r"^\d{5}$", s)]
+with_letter = [s for s in missing_ids if re.search(r"[A-Za-z]", s)]
 
 print(f"純數字4碼: {len(pure_4digit)}")
 print(f"純數字5碼: {len(pure_5digit)}")

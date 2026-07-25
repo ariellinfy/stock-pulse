@@ -17,17 +17,20 @@ from shared.utils import get_gcs_client, BUCKET_NAME
 
 client = get_gcs_client()
 bucket = client.bucket(BUCKET_NAME)
-blob = bucket.blob('raw/fear_greed_history/range=full/data.json')
+blob = bucket.blob("raw/fear_greed_history/range=full/data.json")
 content = json.loads(blob.download_as_text())
 
-print('最外層 keys:', list(content.keys()))
+print("最外層 keys:", list(content.keys()))
 print()
-print('fear_and_greed_historical.data 前 2 筆:')
-print(content['fear_and_greed_historical']['data'][:2])
+print("fear_and_greed_historical.data 前 2 筆:")
+print(content["fear_and_greed_historical"]["data"][:2])
 print()
-print('fear_and_greed_historical.data 總筆數:', len(content['fear_and_greed_historical']['data']))
+print(
+    "fear_and_greed_historical.data 總筆數:",
+    len(content["fear_and_greed_historical"]["data"]),
+)
 
-x_values = [item['x'] for item in content['fear_and_greed_historical']['data']]
+x_values = [item["x"] for item in content["fear_and_greed_historical"]["data"]]
 duplicates = {k: v for k, v in Counter(x_values).items() if v > 1}
 print(f"重複的時間戳數量: {len(duplicates)}")
 print(f"範例: {list(duplicates.items())[:5]}")

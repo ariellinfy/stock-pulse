@@ -18,8 +18,7 @@ from spark.common.schemas import TWSE_RAW_SCHEMA
 
 def explore():
     spark = (
-        SparkSession.builder
-        .appName("stock-pulse-schema-test")
+        SparkSession.builder.appName("stock-pulse-schema-test")
         .master("local[*]")
         .getOrCreate()
     )
@@ -27,6 +26,7 @@ def explore():
     # 我們存的原始 JSON 結構是 {"fields": [...], "data": [[...], ...], ...}
     # 先讀成單一欄位的 JSON,再手動把 data 陣列展開成符合 schema 的 rows
     import json
+
     with open("local_output/twse_daily_2026-07-09.json", "r", encoding="utf-8") as f:
         raw = json.load(f)
 

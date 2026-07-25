@@ -14,8 +14,12 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.standard.operators.python import ShortCircuitOperator
 from airflow.providers.docker.operators.docker import DockerOperator
-from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
-from airflow.providers.google.cloud.operators.bigquery import BigQueryDeleteTableOperator
+from airflow.providers.google.cloud.transfers.gcs_to_bigquery import (
+    GCSToBigQueryOperator,
+)
+from airflow.providers.google.cloud.operators.bigquery import (
+    BigQueryDeleteTableOperator,
+)
 
 from docker.types import Mount
 
@@ -23,7 +27,7 @@ sys.path.insert(0, "/opt/airflow/project")
 
 
 def check_trading_day(**context):
-    target_date = context["data_interval_end"].in_timezone('Asia/Taipei').date()
+    target_date = context["data_interval_end"].in_timezone("Asia/Taipei").date()
     is_weekend = target_date.weekday() >= 5  # 5=星期六, 6=星期日
     if is_weekend:
         print(f"{target_date} 是週末,跳過本次排程,不浪費時間重試")
@@ -32,35 +36,42 @@ def check_trading_day(**context):
 
 
 def run_twse_scraper(**context):
-    from scrapers.twse_client import fetch_daily_quotes_no_permanent_mark  # 需要新增一個不寫永久標記的版本
+    from scrapers.twse_client import (
+        fetch_daily_quotes,
+        FetchStatus,
+    )  # 需要新增一個不寫永久標記的版本
     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
-    from datetime import datetime as dt
     import json
 
-    target_date = context["data_interval_end"].in_timezone('Asia/Taipei').date()
+    target_date = context["data_interval_end"].in_timezone("Asia/Taipei").date()
     print(f"處理日期: {target_date}")
 
-    result = fetch_daily_quotes_no_permanent_mark(target_date)
+    result = fetch_daily_quotes(target_date)
 
-    if result is None:
+    if result.status == FetchStatus.NO_TRADING_DAY:
+        print(f"ℹ️ {target_date} 確認為非交易日,無需處理")
+        return
+
+    if result.status == FetchStatus.UNKNOWN_FAILURE:
         raise ValueError(
             f"{target_date} TWSE 無法取得資料(可能是非交易日,或當日資料尚未彙整完成)。"
             f"若確認是交易日,請檢查排程時間是否過早,或手動重跑此任務。"
         )
 
+    assert result.data is not None  # status == SUCCESS,data 保證有值
+
     client = get_gcs_client()
     content = json.dumps(result, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, "twse_daily", target_date, content)
-    print(f"✅ TWSE 成功寫入 {len(result['data'])} 筆資料")
-    
+    print(f"✅ TWSE 成功寫入 {len(result.data['data'])} 筆資料")
+
 
 def run_tpex_scraper(**context):
     from scrapers.tpex_client import fetch_daily_quotes
     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
-    from datetime import datetime as dt
     import json
 
-    target_date = context["data_interval_end"].in_timezone('Asia/Taipei').date()
+    target_date = context["data_interval_end"].in_timezone("Asia/Taipei").date()
     print(f"處理日期: {target_date}")
 
     # 提醒: TPEx 官方端點固定回傳「當下最新交易日」,不保證等於 target_date
@@ -72,7 +83,9 @@ def run_tpex_scraper(**context):
     client = get_gcs_client()
     content = json.dumps(result, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, "tpex_daily", target_date, content)
-    print(f"✅ TPEx 成功寫入 {len(result['data'])} 筆資料,實際日期: {result.get('actual_trade_date')}")
+    print(
+        f"✅ TPEx 成功寫入 {len(result['data'])} 筆資料,實際日期: {result.get('actual_trade_date')}"
+    )
 
 
 def run_industry_scraper(**context):
@@ -90,7 +103,9 @@ def run_industry_scraper(**context):
             raise ValueError(f"{market} 產業分類清單抓取失敗")
 
         content = json.dumps(records, ensure_ascii=False)
-        write_raw_json(client, BUCKET_NAME, f"industry_list_{market.lower()}", today, content)
+        write_raw_json(
+            client, BUCKET_NAME, f"industry_list_{market.lower()}", today, content
+        )
         print(f"✅ {market} 產業分類清單成功寫入 {len(records)} 筆")
 
 
@@ -100,7 +115,7 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-    
+
 with DAG(
     dag_id="DAG_Taiwan_Market",
     default_args=default_args,
@@ -139,7 +154,12 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[
-            Mount(source="/home/fy/stock-pulse/secrets", target="/app/secrets", type="bind", read_only=True),
+            Mount(
+                source="/home/fy/stock-pulse/secrets",
+                target="/app/secrets",
+                type="bind",
+                read_only=True,
+            ),
         ],
         environment={
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
@@ -156,7 +176,12 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[
-            Mount(source="/home/fy/stock-pulse/secrets", target="/app/secrets", type="bind", read_only=True),
+            Mount(
+                source="/home/fy/stock-pulse/secrets",
+                target="/app/secrets",
+                type="bind",
+                read_only=True,
+            ),
         ],
         environment={
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
@@ -180,16 +205,18 @@ with DAG(
         task_id="load_stock_daily_to_bq",
         gcp_conn_id="google_cloud_default",
         bucket="stock-pulse-data-lake",
-        source_objects=["clean/stock_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"],
+        source_objects=[
+            "clean/stock_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"
+        ],
         destination_project_dataset_table=f"{project_id}.stockpulse_staging.raw_stock_daily",
         source_format="PARQUET",
         write_disposition="WRITE_APPEND",
         extra_config={
             "hivePartitioningOptions": {
                 "mode": "AUTO",
-                "sourceUriPrefix": "gs://stock-pulse-data-lake/clean/stock_daily/"
+                "sourceUriPrefix": "gs://stock-pulse-data-lake/clean/stock_daily/",
             }
-        }
+        },
     )
 
     run_dbt = DockerOperator(
@@ -201,7 +228,12 @@ with DAG(
         docker_url="unix://var/run/docker.sock",
         network_mode="bridge",
         mounts=[
-            Mount(source="/home/fy/stock-pulse/secrets", target="/app/secrets", type="bind", read_only=True),
+            Mount(
+                source="/home/fy/stock-pulse/secrets",
+                target="/app/secrets",
+                type="bind",
+                read_only=True,
+            ),
         ],
     )
 

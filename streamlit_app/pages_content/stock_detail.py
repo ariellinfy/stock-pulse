@@ -48,28 +48,72 @@ def render(client, start_date_filter):
     col1.metric("開盤", f"{latest['open_price']:.2f}")
     col2.metric("最高", f"{latest['high_price']:.2f}")
     col3.metric("最低", f"{latest['low_price']:.2f}")
-    col4.metric("收盤", f"{latest['close_price']:.2f}", f"{latest['close_price'] - prev['close_price']:.2f}")
+    col4.metric(
+        "收盤",
+        f"{latest['close_price']:.2f}",
+        f"{latest['close_price'] - prev['close_price']:.2f}",
+    )
 
     col5, col6, col7, col8 = st.columns(4)
     col5.metric("成交量", f"{latest['trade_volume']:,.0f}")
     col6.metric("MA5", f"{latest['ma5']:.2f}" if pd.notna(latest["ma5"]) else "N/A")
     col7.metric("MA20", f"{latest['ma20']:.2f}" if pd.notna(latest["ma20"]) else "N/A")
     if pd.notna(latest["rsi14"]):
-        rsi_status = "超買" if latest["rsi14"] > 70 else ("超賣" if latest["rsi14"] < 30 else "中性")
+        rsi_status = (
+            "超買"
+            if latest["rsi14"] > 70
+            else ("超賣" if latest["rsi14"] < 30 else "中性")
+        )
         col8.metric("RSI14", f"{latest['rsi14']:.1f}", rsi_status)
     else:
         col8.metric("RSI14", "N/A")
 
     st.divider()
 
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05, subplot_titles=("價格 / K線", "RSI14"))
-    fig.add_trace(go.Candlestick(x=df["trade_date"], open=df["open_price"], high=df["high_price"], low=df["low_price"], close=df["close_price"], name="K線", increasing_line_color="red", decreasing_line_color="green"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df["trade_date"], y=df["ma5"], name="MA5", line=dict(width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df["trade_date"], y=df["ma20"], name="MA20", line=dict(width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df["trade_date"], y=df["rsi14"], name="RSI14", line=dict(color="purple")), row=2, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.7, 0.3],
+        vertical_spacing=0.05,
+        subplot_titles=("價格 / K線", "RSI14"),
+    )
+    fig.add_trace(
+        go.Candlestick(
+            x=df["trade_date"],
+            open=df["open_price"],
+            high=df["high_price"],
+            low=df["low_price"],
+            close=df["close_price"],
+            name="K線",
+            increasing_line_color="red",
+            decreasing_line_color="green",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=df["trade_date"], y=df["ma5"], name="MA5", line=dict(width=1)),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=df["trade_date"], y=df["ma20"], name="MA20", line=dict(width=1)),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["trade_date"], y=df["rsi14"], name="RSI14", line=dict(color="purple")
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1) # pyright: ignore[reportArgumentType]
     fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
     fig.update_layout(height=700, xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 
-    st.caption("RSI14 為簡化版計算(以簡單移動平均取代標準平滑移動平均),數值與券商軟體可能略有差異,長期趨勢意義一致")
+    st.caption(
+        "RSI14 為簡化版計算(以簡單移動平均取代標準平滑移動平均),數值與券商軟體可能略有差異,長期趨勢意義一致"
+    )

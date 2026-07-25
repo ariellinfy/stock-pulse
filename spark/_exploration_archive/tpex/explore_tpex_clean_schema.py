@@ -38,7 +38,11 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, LongType
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from spark.common.schemas import TPEX_RAW_SCHEMA, TPEX_EXPECTED_RAW_FIELDS, assert_fields_match
+from spark.common.schemas import (
+    TPEX_RAW_SCHEMA,
+    assert_fields_match,
+)
+from scrapers.tpex_client import EXPECTED_FIELDS as TPEX_EXPECTED_RAW_FIELDS
 
 
 def safe_cast_numeric(col_name: str, target_type):
@@ -48,16 +52,33 @@ def safe_cast_numeric(col_name: str, target_type):
     不讓程式崩潰,因為我們已經確認過這是資料裡真實存在、有規律的正常現象。
     """
     cleaned = F.trim(F.regexp_replace(F.col(col_name), ",", ""))
-    return F.when(cleaned.rlike(r"^[+-]?\d+\.?\d*$"), cleaned.cast(target_type)).otherwise(F.lit(None).cast(target_type))
+    return F.when(
+        cleaned.rlike(r"^[+-]?\d+\.?\d*$"), cleaned.cast(target_type)
+    ).otherwise(F.lit(None).cast(target_type))
 
 
 def clean_tpex(df):
     # 統一先 trim 所有字串欄位,防禦潛在的尾隨空白問題(今天已確認漲跌欄位存在此問題)
-    numeric_cols_long = ["trade_volume", "transaction_count", "trade_value",
-                          "last_bid_volume", "last_ask_volume", "issued_shares"]
-    numeric_cols_double = ["close_price", "open_price", "high_price", "low_price",
-                            "average_price", "last_bid_price", "last_ask_price",
-                            "next_day_reference_price", "next_day_limit_up", "next_day_limit_down"]
+    numeric_cols_long = [
+        "trade_volume",
+        "transaction_count",
+        "trade_value",
+        "last_bid_volume",
+        "last_ask_volume",
+        "issued_shares",
+    ]
+    numeric_cols_double = [
+        "close_price",
+        "open_price",
+        "high_price",
+        "low_price",
+        "average_price",
+        "last_bid_price",
+        "last_ask_price",
+        "next_day_reference_price",
+        "next_day_limit_up",
+        "next_day_limit_down",
+    ]
 
     # [D1] 用途: 在轉型之前,掃描所有預定轉數字的欄位,列出「無法被解析成標準數字」的異常值長怎樣
     # numeric_cols_all = numeric_cols_long + numeric_cols_double
@@ -80,15 +101,16 @@ def clean_tpex(df):
     for col_name in numeric_cols_double:
         df = df.withColumn(col_name, safe_cast_numeric(col_name, DoubleType()))
 
-    df = df.withColumn("change_amount", safe_cast_numeric("change_symbol_raw", DoubleType()))
+    df = df.withColumn(
+        "change_amount", safe_cast_numeric("change_symbol_raw", DoubleType())
+    )
 
     return df
 
 
 def explore():
     spark = (
-        SparkSession.builder
-        .appName("stock-pulse-tpex-schema-test")
+        SparkSession.builder.appName("stock-pulse-tpex-schema-test")
         .master("local[*]")
         .getOrCreate()
     )
@@ -99,7 +121,9 @@ def explore():
     with open("local_output/tpex_daily_2026-07-09.json", "r", encoding="utf-8") as f:
         raw = json.load(f)
 
-    assert_fields_match(raw["fields"], TPEX_EXPECTED_RAW_FIELDS, "TPEx")  # 先驗證,不通過就直接中斷
+    assert_fields_match(
+        raw["fields"], TPEX_EXPECTED_RAW_FIELDS, "TPEx"
+    )  # 先驗證,不通過就直接中斷
 
     rows = raw["data"]
     df = spark.createDataFrame(rows, schema=TPEX_RAW_SCHEMA)
@@ -186,7 +210,9 @@ def explore():
         print("\n=== 過濾後仍有 null OHLC 的股票範例 ===")
         filtered.filter(
             F.col("close_price").isNull() & F.col("average_price").isNotNull()
-        ).select("stock_id", "stock_name", "trade_volume", "average_price").show(20, truncate=False)
+        ).select("stock_id", "stock_name", "trade_volume", "average_price").show(
+            20, truncate=False
+        )
 
     spark.stop()
 

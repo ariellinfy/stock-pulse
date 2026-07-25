@@ -2,6 +2,7 @@
 共用的 SparkSession 建立工具。
 本地測試與之後 Docker/Airflow 內執行都呼叫這裡，確保設定一致。
 """
+
 import os
 from pyspark.sql import SparkSession
 from dotenv import load_dotenv
@@ -29,8 +30,7 @@ def build_spark_session(app_name: str) -> SparkSession:
         )
 
     builder = (
-        SparkSession.builder
-        .appName(app_name)
+        SparkSession.builder.appName(app_name)
         .master("local[*]")
         .config("spark.driver.memory", "2g")
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
@@ -38,8 +38,13 @@ def build_spark_session(app_name: str) -> SparkSession:
         .config("spark.sql.parquet.compression.codec", "snappy")
         .config("spark.sql.session.timeZone", "Asia/Taipei")
         .config("spark.hadoop.google.cloud.auth.service.account.enable", "true")
-        .config("spark.hadoop.google.cloud.auth.service.account.json.keyfile", gcp_key_path)
-        .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+        .config(
+            "spark.hadoop.google.cloud.auth.service.account.json.keyfile", gcp_key_path
+        )
+        .config(
+            "spark.hadoop.fs.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+        )
     )
 
     # 只有明確提供 JAR 路徑時才加這個設定(本機開發情境);

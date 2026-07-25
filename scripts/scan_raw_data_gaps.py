@@ -12,7 +12,9 @@ from datetime import datetime
 from shared.utils import get_gcs_client, BUCKET_NAME
 
 
-def scan_raw_data_gaps(bucket_name: str, twse_industry_records: list[dict], min_missing: int = 1):
+def scan_raw_data_gaps(
+    bucket_name: str, twse_industry_records: list[dict], min_missing: int = 1
+):
     """
     回傳每個交易日「應已上市但當天缺席」的股票清單。
     min_missing: 只回報缺席數 >= 此門檻的日子(預設 1,回傳全部有缺席的日子)。
@@ -21,8 +23,7 @@ def scan_raw_data_gaps(bucket_name: str, twse_industry_records: list[dict], min_
     for r in twse_industry_records:
         raw_date = r.get("上市日期", "")
         if raw_date and len(raw_date) == 8:
-            listing_dates[r["公司代號"]] = datetime.strptime(
-                raw_date, "%Y%m%d").date()
+            listing_dates[r["公司代號"]] = datetime.strptime(raw_date, "%Y%m%d").date()
 
     name_lookup = {r["公司代號"]: r["公司名稱"] for r in twse_industry_records}
 
@@ -42,15 +43,18 @@ def scan_raw_data_gaps(bucket_name: str, twse_industry_records: list[dict], min_
             continue  # 非交易日,跳過
 
         actual_ids = set(row[0] for row in rows)
-        should_exist_today = {sid for sid,
-            ld in listing_dates.items() if ld <= trade_date}
+        should_exist_today = {
+            sid for sid, ld in listing_dates.items() if ld <= trade_date
+        }
         missing = should_exist_today - actual_ids
 
         if len(missing) >= min_missing:
-            missing_with_names = [(sid, name_lookup.get(sid, "(查無名稱)"))
-                                   for sid in sorted(missing)]
+            missing_with_names = [
+                (sid, name_lookup.get(sid, "(查無名稱)")) for sid in sorted(missing)
+            ]
             suspicious_days.append(
-                (dt_str, len(actual_ids), len(missing), missing_with_names))
+                (dt_str, len(actual_ids), len(missing), missing_with_names)
+            )
 
     suspicious_days.sort(key=lambda x: -x[2])
 
@@ -61,7 +65,9 @@ def scan_raw_data_gaps(bucket_name: str, twse_industry_records: list[dict], min_
     return suspicious_days
 
 
-def verify_days_fixed(bucket_name: str, dates_to_check: list[str], min_expected_rows: int = 1300):
+def verify_days_fixed(
+    bucket_name: str, dates_to_check: list[str], min_expected_rows: int = 1300
+):
     """確認指定日期重新回補後,筆數是否恢復到合理範圍。"""
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)

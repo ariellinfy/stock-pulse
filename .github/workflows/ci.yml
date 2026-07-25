@@ -15,9 +15,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install lint tools
-        run: pip install flake8
+        run: pip install flake8 black
+      - name: Check formatting with black
+        run: black --check scrapers/ shared/ scripts/ spark/ --exclude="_exploration_archive|_planned"
       - name: Run flake8
-        run: flake8 scrapers/ shared/ scripts/ spark/ --max-line-length=120 --extend-ignore=E203,W503,E402 --exclude=_exploration_archive,_planned
+        run: flake8 scrapers/ shared/ scripts/ spark/ --max-line-length=150 --extend-ignore=E203,W503,E402 --exclude=_exploration_archive,_planned
 
   dbt-check:
     runs-on: ubuntu-latest

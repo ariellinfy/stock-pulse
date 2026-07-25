@@ -21,7 +21,9 @@ def add_trade_date(df, trade_date: str):
 
 def safe_cast_numeric(col_name: str, target_type):
     cleaned = F.trim(F.regexp_replace(F.col(col_name), ",", ""))
-    return F.when(cleaned.rlike(r"^[+-]?\d+\.?\d*$"), cleaned.cast(target_type)).otherwise(F.lit(None).cast(target_type))
+    return F.when(
+        cleaned.rlike(r"^[+-]?\d+\.?\d*$"), cleaned.cast(target_type)
+    ).otherwise(F.lit(None).cast(target_type))
 
 
 def filter_official_stocks(df, official_stock_ids: list[str]):
@@ -34,42 +36,41 @@ def filter_official_stocks(df, official_stock_ids: list[str]):
 
 
 def clean_twse(df):
-    df = df.withColumn("trade_volume", safe_cast_numeric(
-        "trade_volume", LongType()))
-    df = df.withColumn("transaction_count", safe_cast_numeric(
-        "transaction_count", LongType()))
-    df = df.withColumn("trade_value", safe_cast_numeric(
-        "trade_value", LongType()))
-    df = df.withColumn("open_price", safe_cast_numeric(
-        "open_price", DoubleType()))
-    df = df.withColumn("high_price", safe_cast_numeric(
-        "high_price", DoubleType()))
-    df = df.withColumn("low_price", safe_cast_numeric(
-        "low_price", DoubleType()))
-    df = df.withColumn("close_price", safe_cast_numeric(
-        "close_price", DoubleType()))
-    df = df.withColumn("last_bid_price", safe_cast_numeric(
-        "last_bid_price", DoubleType()))
-    df = df.withColumn("last_bid_volume", safe_cast_numeric(
-        "last_bid_volume", LongType()))
-    df = df.withColumn("last_ask_price", safe_cast_numeric(
-        "last_ask_price", DoubleType()))
-    df = df.withColumn("last_ask_volume", safe_cast_numeric(
-        "last_ask_volume", LongType()))
+    df = df.withColumn("trade_volume", safe_cast_numeric("trade_volume", LongType()))
+    df = df.withColumn(
+        "transaction_count", safe_cast_numeric("transaction_count", LongType())
+    )
+    df = df.withColumn("trade_value", safe_cast_numeric("trade_value", LongType()))
+    df = df.withColumn("open_price", safe_cast_numeric("open_price", DoubleType()))
+    df = df.withColumn("high_price", safe_cast_numeric("high_price", DoubleType()))
+    df = df.withColumn("low_price", safe_cast_numeric("low_price", DoubleType()))
+    df = df.withColumn("close_price", safe_cast_numeric("close_price", DoubleType()))
+    df = df.withColumn(
+        "last_bid_price", safe_cast_numeric("last_bid_price", DoubleType())
+    )
+    df = df.withColumn(
+        "last_bid_volume", safe_cast_numeric("last_bid_volume", LongType())
+    )
+    df = df.withColumn(
+        "last_ask_price", safe_cast_numeric("last_ask_price", DoubleType())
+    )
+    df = df.withColumn(
+        "last_ask_volume", safe_cast_numeric("last_ask_volume", LongType())
+    )
     df = df.withColumn("pe_ratio", safe_cast_numeric("pe_ratio", DoubleType()))
 
     df = df.withColumn(
         "change_direction",
-        F.trim(F.regexp_extract(
-            F.col("change_symbol_raw"), r"<p[^>]*>(.*?)</p>", 1))
+        F.trim(F.regexp_extract(F.col("change_symbol_raw"), r"<p[^>]*>(.*?)</p>", 1)),
     )
-    df = df.withColumn("change_amount", safe_cast_numeric(
-        "change_amount", DoubleType()))
+    df = df.withColumn(
+        "change_amount", safe_cast_numeric("change_amount", DoubleType())
+    )
     df = df.withColumn(
         "signed_change_amount",
         F.when(F.col("change_direction") == "-", -F.col("change_amount"))
-         .when(F.col("change_direction") == "X", F.lit(None).cast(DoubleType()))
-         .otherwise(F.col("change_amount"))
+        .when(F.col("change_direction") == "X", F.lit(None).cast(DoubleType()))
+        .otherwise(F.col("change_amount")),
     )
     return df
 
@@ -77,49 +78,79 @@ def clean_twse(df):
 def unify_twse(df):
     return df.select(
         F.col("dt"),
-        F.col("stock_id"), F.col("stock_name"), F.lit("TWSE").alias("market"),
-        F.col("open_price"), F.col("high_price"), F.col(
-            "low_price"), F.col("close_price"),
+        F.col("stock_id"),
+        F.col("stock_name"),
+        F.lit("TWSE").alias("market"),
+        F.col("open_price"),
+        F.col("high_price"),
+        F.col("low_price"),
+        F.col("close_price"),
         F.lit(None).cast(DoubleType()).alias("average_price"),
-        F.col("trade_volume"), F.col(
-            "trade_value"), F.col("transaction_count"),
+        F.col("trade_volume"),
+        F.col("trade_value"),
+        F.col("transaction_count"),
         F.col("signed_change_amount").alias("change_amount"),
-        F.col("last_bid_price"), F.col("last_bid_volume"),
-        F.col("last_ask_price"), F.col("last_ask_volume"),
+        F.col("last_bid_price"),
+        F.col("last_bid_volume"),
+        F.col("last_ask_price"),
+        F.col("last_ask_volume"),
         F.col("pe_ratio"),
         F.lit(None).cast(LongType()).alias("issued_shares"),
     )
 
 
 def clean_tpex(df):
-    numeric_cols_long = ["trade_volume", "transaction_count", "trade_value",
-                          "last_bid_volume", "last_ask_volume", "issued_shares"]
-    numeric_cols_double = ["close_price", "open_price", "high_price", "low_price",
-                            "average_price", "last_bid_price", "last_ask_price",
-                            "next_day_reference_price", "next_day_limit_up", "next_day_limit_down"]
+    numeric_cols_long = [
+        "trade_volume",
+        "transaction_count",
+        "trade_value",
+        "last_bid_volume",
+        "last_ask_volume",
+        "issued_shares",
+    ]
+    numeric_cols_double = [
+        "close_price",
+        "open_price",
+        "high_price",
+        "low_price",
+        "average_price",
+        "last_bid_price",
+        "last_ask_price",
+        "next_day_reference_price",
+        "next_day_limit_up",
+        "next_day_limit_down",
+    ]
 
     for col_name in numeric_cols_long:
         df = df.withColumn(col_name, safe_cast_numeric(col_name, LongType()))
     for col_name in numeric_cols_double:
         df = df.withColumn(col_name, safe_cast_numeric(col_name, DoubleType()))
 
-    df = df.withColumn("change_amount", safe_cast_numeric(
-        "change_symbol_raw", DoubleType()))
+    df = df.withColumn(
+        "change_amount", safe_cast_numeric("change_symbol_raw", DoubleType())
+    )
     return df
 
 
 def unify_tpex(df):
     return df.select(
         F.col("dt"),
-        F.col("stock_id"), F.col("stock_name"), F.lit("TPEx").alias("market"),
-        F.col("open_price"), F.col("high_price"), F.col(
-            "low_price"), F.col("close_price"),
+        F.col("stock_id"),
+        F.col("stock_name"),
+        F.lit("TPEx").alias("market"),
+        F.col("open_price"),
+        F.col("high_price"),
+        F.col("low_price"),
+        F.col("close_price"),
         F.col("average_price"),
-        F.col("trade_volume"), F.col(
-            "trade_value"), F.col("transaction_count"),
+        F.col("trade_volume"),
+        F.col("trade_value"),
+        F.col("transaction_count"),
         F.col("change_amount"),
-        F.col("last_bid_price"), F.col("last_bid_volume"),
-        F.col("last_ask_price"), F.col("last_ask_volume"),
+        F.col("last_bid_price"),
+        F.col("last_bid_volume"),
+        F.col("last_ask_price"),
+        F.col("last_ask_volume"),
         F.lit(None).cast(DoubleType()).alias("pe_ratio"),
         F.col("issued_shares"),
     )
@@ -136,8 +167,7 @@ def clean_yahoo_history(df):
     for col_name in ["open", "high", "low", "close"]:
         df = df.withColumn(
             col_name,
-            F.when(F.isnan(F.col(col_name)), F.lit(
-                None)).otherwise(F.col(col_name))
+            F.when(F.isnan(F.col(col_name)), F.lit(None)).otherwise(F.col(col_name)),
         )
 
     df = df.withColumn("open", F.round(F.col("open"), 2))
@@ -182,14 +212,14 @@ def clean_fear_greed_history(df):
     - 去除重複日期(已知現象: 歷史數列最後一筆常與即時值時間戳重疊)
     """
     df = df.withColumn(
-        "dt",
-        F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
+        "dt", F.from_unixtime((F.col("x") / 1000).cast("long"), "yyyy-MM-dd")
     )
     df = df.withColumnRenamed("y", "score")
-    df = df.withColumn("score", F.round(F.col("score"), 2)
-                       )  # round to 2 decimal places
+    df = df.withColumn("score", F.round(F.col("score"), 2))  # round to 2 decimal places
     df = df.withColumnRenamed("rating", "fear_greed_rating")
-    df = df.dropDuplicates(["dt"])  # 同一天多筆時,保留其中一筆(去重優先於精確選擇,先求資料不重複)
+    df = df.dropDuplicates(
+        ["dt"]
+    )  # 同一天多筆時,保留其中一筆(去重優先於精確選擇,先求資料不重複)
     df = df.select("dt", "score", "fear_greed_rating")
     return df
 
@@ -199,7 +229,9 @@ def unify_fear_greed(df):
     return df.select("dt", "score", "fear_greed_rating")
 
 
-def merge_markets(twse_df, tpex_df, twse_official_ids: list[str], tpex_official_ids: list[str]):
+def merge_markets(
+    twse_df, tpex_df, twse_official_ids: list[str], tpex_official_ids: list[str]
+):
     """
     合併兩個已對齊 schema 的 DataFrame。
     TWSE、TPEx 資料在合併前都先用各自的官方清單過濾,排除 ETF/權證/可轉債等非個股證券。

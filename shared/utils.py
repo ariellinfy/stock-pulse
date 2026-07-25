@@ -31,7 +31,8 @@ def get_gcs_client(key_path: str | None = None) -> storage.Client:
     (相對路徑僅為向下相容本機開發習慣,不建議在容器/正式環境依賴它)
     """
     resolved_path = key_path or os.environ.get(
-        "GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
+        "GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json"
+    )
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = resolved_path
     return storage.Client()
 
@@ -72,7 +73,9 @@ def write_raw_json(
 ) -> str:
     """按日期分區的寫入(既有邏輯不變,只是內部改呼叫通用函式)。"""
     dt_str = target_date.strftime("%Y-%m-%d")
-    return write_raw_partitioned(client, bucket_name, source_name, "dt", dt_str, content)
+    return write_raw_partitioned(
+        client, bucket_name, source_name, "dt", dt_str, content
+    )
 
 
 def raw_blob_exists_partitioned(

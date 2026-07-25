@@ -1,5 +1,6 @@
 import yfinance as yf
 
+
 def explore():
     # 測試一支 TWSE 股票(台積電)跟一支 TPEx 股票(這裡先用我們資料裡看過的代號)
     test_cases = [
@@ -14,6 +15,7 @@ def explore():
         print(hist)
         print(f"欄位: {list(hist.columns)}")
         print(f"資料型態 (index): {type(hist.index)}")
+
 
 if __name__ == "__main__":
     explore()

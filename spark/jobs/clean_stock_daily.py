@@ -13,12 +13,21 @@ from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
 from spark.common.schemas import TWSE_RAW_SCHEMA, TPEX_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
 from spark.jobs.clean_stock import (
-    clean_twse, clean_tpex, unify_twse, unify_tpex,
-    filter_official_stocks
+    clean_twse,
+    clean_tpex,
+    unify_twse,
+    unify_tpex,
+    filter_official_stocks,
 )
 
 
-def clean_single_day(spark, bucket_name: str, target_date: str, twse_official_ids: list[str], tpex_official_ids: list[str]):
+def clean_single_day(
+    spark,
+    bucket_name: str,
+    target_date: str,
+    twse_official_ids: list[str],
+    tpex_official_ids: list[str],
+):
     """
     清洗指定單一日期的 TWSE + TPEx 每日行情,動態分區覆寫寫出。
     只會動到 dt=target_date 這一個分區,不影響其他歷史資料。
@@ -30,17 +39,19 @@ def clean_single_day(spark, bucket_name: str, target_date: str, twse_official_id
     # 不需要像 backfill 版本那樣 explode 多天份的巢狀結構
     twse_raw_json = spark.read.option("multiline", "true").json(twse_path)
     twse_df = spark.createDataFrame(
-        twse_raw_json.select(F.explode("data").alias("row")
-                             ).rdd.map(lambda r: r["row"]),
-        schema=TWSE_RAW_SCHEMA
+        twse_raw_json.select(F.explode("data").alias("row")).rdd.map(
+            lambda r: r["row"]
+        ),
+        schema=TWSE_RAW_SCHEMA,
     )
     twse_df = twse_df.withColumn("dt", F.lit(target_date))
 
     tpex_raw_json = spark.read.option("multiline", "true").json(tpex_path)
     tpex_df = spark.createDataFrame(
-        tpex_raw_json.select(F.explode("data").alias("row")
-                             ).rdd.map(lambda r: r["row"]),
-        schema=TPEX_RAW_SCHEMA
+        tpex_raw_json.select(F.explode("data").alias("row")).rdd.map(
+            lambda r: r["row"]
+        ),
+        schema=TPEX_RAW_SCHEMA,
     )
     tpex_df = tpex_df.withColumn("dt", F.lit(target_date))
 
@@ -64,6 +75,7 @@ def clean_single_day(spark, bucket_name: str, target_date: str, twse_official_id
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", required=True, help="格式 YYYY-MM-DD")
     args = parser.parse_args()
@@ -74,7 +86,9 @@ if __name__ == "__main__":
     tpex_records = load_industry_list_from_gcs(BUCKET_NAME, "TPEx")
 
     clean_single_day(
-        spark, BUCKET_NAME, args.date,
+        spark,
+        BUCKET_NAME,
+        args.date,
         [r["公司代號"] for r in twse_records],
         [r["公司代號"] for r in tpex_records],
     )

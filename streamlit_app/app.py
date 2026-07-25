@@ -14,7 +14,9 @@ last_updated_query = """
 SELECT MAX(trade_date) as latest_stock_date
 FROM `stockpulse_marts.fact_stock_daily`
 """
-latest_date = client.query(last_updated_query).to_dataframe().iloc[0]["latest_stock_date"]
+latest_date = (
+    client.query(last_updated_query).to_dataframe().iloc[0]["latest_stock_date"]
+)
 
 st.caption(f"📅 資料最後更新至:{latest_date}(每日台北時間 17:00 自動更新)")
 

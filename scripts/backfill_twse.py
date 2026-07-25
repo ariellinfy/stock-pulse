@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_json, raw_blob_exists
-from scrapers.twse_client import fetch_daily_quotes
+from scrapers.twse_client import FetchStatus, fetch_daily_quotes
 
 SOURCE_NAME = "twse_daily"
 
@@ -37,10 +37,13 @@ def mark_no_trading_day(client, bucket_name: str, source_name: str, target_date:
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
     blob.upload_from_string(
-        '{"status": "confirmed_no_trading_day"}', content_type="application/json")
+        '{"status": "confirmed_no_trading_day"}', content_type="application/json"
+    )
 
 
-def is_marked_no_trading_day(client, bucket_name: str, source_name: str, target_date: date) -> bool:
+def is_marked_no_trading_day(
+    client, bucket_name: str, source_name: str, target_date: date
+) -> bool:
     dt_str = target_date.strftime("%Y-%m-%d")
     blob_path = f"raw/{source_name}/dt={dt_str}/_no_data_marker.json"
     return client.bucket(bucket_name).blob(blob_path).exists()
@@ -69,23 +72,26 @@ def backfill_twse(start: date, end: date):
 
         result = fetch_daily_quotes(target_date)
 
-        if result == "NO_TRADING_DAY":
+        if result.status == FetchStatus.NO_TRADING_DAY:
             mark_no_trading_day(client, BUCKET_NAME, SOURCE_NAME, target_date)
             no_trading += 1
             continue
 
-        if result is None:
+        if result.status == FetchStatus.UNKNOWN_FAILURE:
             print(f"⚠️ {target_date} 本次無法確認狀態,之後可重試")
             failed += 1
             continue
 
-        content = json.dumps(result, ensure_ascii=False)
+        assert result.data is not None  # status == SUCCESS,data 保證有值
+
+        content = json.dumps(result.data, ensure_ascii=False)
         write_raw_json(client, BUCKET_NAME, SOURCE_NAME, target_date, content)
         succeeded += 1
 
-    print(f"\n=== 回補完成 ===")
+    print("\n=== 回補完成 ===")
     print(
-        f"成功: {succeeded} / 跳過(已存在): {skipped} / 確認非交易日: {no_trading} / 待重試: {failed}")
+        f"成功: {succeeded} / 跳過(已存在): {skipped} / 確認非交易日: {no_trading} / 待重試: {failed}"
+    )
 
 
 if __name__ == "__main__":
@@ -93,8 +99,7 @@ if __name__ == "__main__":
     from datetime import datetime
 
     parser = argparse.ArgumentParser(description="TWSE 歷史資料回補")
-    parser.add_argument("--start-date", required=True,
-                        help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
     parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
     args = parser.parse_args()
 
