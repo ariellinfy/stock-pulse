@@ -1,3 +1,11 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -23,7 +31,7 @@ jobs:
       - name: Create fake profiles.yml (dbt parse 不需要真實連線)
         run: |
           mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml << 'EOF'
+          cat > ~/.dbt/profiles.yml << 'INNEREOF'
           stock_pulse:
             target: dev
             outputs:
@@ -35,7 +43,7 @@ jobs:
                 dataset: stockpulse_staging
                 threads: 4
                 location: us-west1
-          EOF
+          INNEREOF
       - name: dbt deps
         working-directory: dbt
         run: dbt deps
