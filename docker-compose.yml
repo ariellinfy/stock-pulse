@@ -164,5 +164,17 @@ services:
     profiles:
       - tools
 
+  streamlit:
+    build:
+      context: .
+      dockerfile: streamlit_app/Dockerfile
+    environment:
+      GCP_SA_KEY_PATH: /app/secrets/gcp-sa-key.json
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+    volumes:
+      - ./secrets:/app/secrets:ro
+    ports:
+      - "8501:8501"
+
 volumes:
   postgres-db-volume:
