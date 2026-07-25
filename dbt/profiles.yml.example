@@ -5,7 +5,7 @@ stock_pulse:
       type: bigquery
       method: service-account
       keyfile: /app/secrets/gcp-sa-key.json
-      project: stock-pulse-260629
+      project: YOUR_GCP_PROJECT_ID
       dataset: stockpulse_staging
       threads: 4
       location: us-west1
