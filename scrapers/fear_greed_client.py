@@ -11,6 +11,7 @@ CNN Fear & Greed Index 爬蟲
 import sys
 import json
 import requests
+from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -63,7 +64,8 @@ def fetch_fear_greed(start_date: date) -> dict | None:
         return None
 
     fg = payload["fear_and_greed"]
-    print(f"✅ 取得 Fear & Greed 即時值: score={fg['score']:.2f}, rating={fg['rating']}")
+    print(
+        f"✅ 取得 Fear & Greed 即時值: score={fg['score']:.2f}, rating={fg['rating']}")
 
     return payload  # 忠實回傳整包,不篩選欄位
 
@@ -77,7 +79,6 @@ def fetch_fear_greed_full_history(start_date: date) -> dict | None:
 
 
 # if __name__ == "__main__":
-#     from datetime import date
 #     from datetime import timedelta
 #     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 

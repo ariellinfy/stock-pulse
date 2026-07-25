@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # 讀取專案根目錄的 .env 檔案
 
+
 def get_required_env(key: str) -> str:
     """
     讀取必要的環境變數,若不存在則立即中斷並給出清楚的錯誤訊息。
@@ -29,7 +30,8 @@ def get_gcs_client(key_path: str | None = None) -> storage.Client:
     key_path 優先順序: 明確傳入的參數 > 環境變數 GCP_SA_KEY_PATH > 預設相對路徑
     (相對路徑僅為向下相容本機開發習慣,不建議在容器/正式環境依賴它)
     """
-    resolved_path = key_path or os.environ.get("GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
+    resolved_path = key_path or os.environ.get(
+        "GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = resolved_path
     return storage.Client()
 

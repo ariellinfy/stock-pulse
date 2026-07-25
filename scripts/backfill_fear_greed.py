@@ -34,7 +34,8 @@ def backfill_fear_greed(start_date: date):
         return
 
     content = json.dumps(result, ensure_ascii=False)
-    write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME, "range", PARTITION_VALUE, content)
+    write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME,
+                          "range", PARTITION_VALUE, content)
 
 
 # if __name__ == "__main__":
@@ -46,7 +47,8 @@ if __name__ == "__main__":
     from datetime import datetime
 
     parser = argparse.ArgumentParser(description="Fear & Greed 歷史資料回補")
-    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--start-date", required=True,
+                        help="起始日期,格式 YYYY-MM-DD")
     args = parser.parse_args()
 
     start = datetime.strptime(args.start_date, "%Y-%m-%d").date()

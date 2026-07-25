@@ -12,6 +12,7 @@ TWSE 每日全市場收盤行情爬蟲
 import sys
 import time
 import requests
+from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -80,12 +81,14 @@ def fetch_daily_quotes(target_date: date, max_retries: int = 3, no_data_confirm_
 
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
+            resp = requests.get(TWSE_URL, params=params,
+                                headers=headers, timeout=15)
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if resp.status_code == 403:
                 wait_time = 10 * attempt
-                print(f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})")
+                print(
+                    f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})")
                 time.sleep(wait_time)
                 continue
             else:
@@ -99,7 +102,8 @@ def fetch_daily_quotes(target_date: date, max_retries: int = 3, no_data_confirm_
 
         if payload.get("stat") != "OK":
             no_data_confirmations += 1
-            print(f"ℹ️ {date_str} 第 {no_data_confirmations} 次確認無交易資料(stat={payload.get('stat')})")
+            print(
+                f"ℹ️ {date_str} 第 {no_data_confirmations} 次確認無交易資料(stat={payload.get('stat')})")
 
             if no_data_confirmations >= no_data_confirm_attempts:
                 print(f"✅ {date_str} 已連續 {no_data_confirm_attempts} 次確認,判定為非交易日")
@@ -149,12 +153,14 @@ def fetch_daily_quotes_no_permanent_mark(target_date: date, max_retries: int = 3
 
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
+            resp = requests.get(TWSE_URL, params=params,
+                                headers=headers, timeout=15)
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if resp.status_code == 403:
                 wait_time = 10 * attempt
-                print(f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})")
+                print(
+                    f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})")
                 time.sleep(wait_time)
                 continue
             print(f"❌ {date_str} 請求失敗(非 403): {e}")
@@ -166,7 +172,8 @@ def fetch_daily_quotes_no_permanent_mark(target_date: date, max_retries: int = 3
         payload = resp.json()
 
         if payload.get("stat") != "OK":
-            print(f"ℹ️ {date_str} 目前查無資料(stat={payload.get('stat')}),可能是非交易日或資料尚未彙整")
+            print(
+                f"ℹ️ {date_str} 目前查無資料(stat={payload.get('stat')}),可能是非交易日或資料尚未彙整")
             return None  # 不永久標記,單純回傳 None
 
         tables = payload.get("tables", [])
@@ -193,9 +200,8 @@ def fetch_daily_quotes_no_permanent_mark(target_date: date, max_retries: int = 3
 
 # if __name__ == "__main__":
 #     import json
-#     from datetime import date
 #     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
-    
+
 #     target_date = date(2026, 7, 11)
 #     result = fetch_daily_quotes(target_date)
 

@@ -37,7 +37,7 @@ def save_failed_list(failed: list[str], filepath: str = "local_output/yahoo_fail
         json.dump(failed, f, ensure_ascii=False, indent=2)
     print(f"✅ 失敗清單已存至 {filepath}")
 
-    
+
 def fetch_yahoo_history(
     stock_id: str,
     market: str,
@@ -59,7 +59,8 @@ def fetch_yahoo_history(
     for attempt in range(1, max_retries + 1):
         try:
             ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(start=start_date.isoformat(), end=yahoo_end.isoformat())
+            hist = ticker.history(
+                start=start_date.isoformat(), end=yahoo_end.isoformat())
 
             if hist.empty:
                 print(f"⚠️ {ticker_symbol} 無資料(可能是新股、下市或非交易區間)")

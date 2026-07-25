@@ -24,7 +24,8 @@ def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
     )
 
     matched = exploded.select(
-        F.from_unixtime((F.col("record.x") / 1000).cast("long"), "yyyy-MM-dd").alias("record_date"),
+        F.from_unixtime((F.col("record.x") / 1000).cast("long"),
+                        "yyyy-MM-dd").alias("record_date"),
         F.col("record.y").alias("score"),
         F.col("record.rating").alias("fear_greed_rating"),
     ).filter(F.col("record_date") == target_date)

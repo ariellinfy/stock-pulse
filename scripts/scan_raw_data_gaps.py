@@ -21,7 +21,8 @@ def scan_raw_data_gaps(bucket_name: str, twse_industry_records: list[dict], min_
     for r in twse_industry_records:
         raw_date = r.get("上市日期", "")
         if raw_date and len(raw_date) == 8:
-            listing_dates[r["公司代號"]] = datetime.strptime(raw_date, "%Y%m%d").date()
+            listing_dates[r["公司代號"]] = datetime.strptime(
+                raw_date, "%Y%m%d").date()
 
     name_lookup = {r["公司代號"]: r["公司名稱"] for r in twse_industry_records}
 
@@ -41,12 +42,15 @@ def scan_raw_data_gaps(bucket_name: str, twse_industry_records: list[dict], min_
             continue  # 非交易日,跳過
 
         actual_ids = set(row[0] for row in rows)
-        should_exist_today = {sid for sid, ld in listing_dates.items() if ld <= trade_date}
+        should_exist_today = {sid for sid,
+            ld in listing_dates.items() if ld <= trade_date}
         missing = should_exist_today - actual_ids
 
         if len(missing) >= min_missing:
-            missing_with_names = [(sid, name_lookup.get(sid, "(查無名稱)")) for sid in sorted(missing)]
-            suspicious_days.append((dt_str, len(actual_ids), len(missing), missing_with_names))
+            missing_with_names = [(sid, name_lookup.get(sid, "(查無名稱)"))
+                                   for sid in sorted(missing)]
+            suspicious_days.append(
+                (dt_str, len(actual_ids), len(missing), missing_with_names))
 
     suspicious_days.sort(key=lambda x: -x[2])
 

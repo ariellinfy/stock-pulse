@@ -36,7 +36,8 @@ def load_tpex_stock_list(client, bucket_name: str) -> list[str]:
     blobs = list(bucket.list_blobs(prefix=f"raw/industry_list_tpex/"))
 
     if not blobs:
-        raise RuntimeError("找不到 industry_list_tpex 的任何資料,請先執行 industry_client.py")
+        raise RuntimeError(
+            "找不到 industry_list_tpex 的任何資料,請先執行 industry_client.py")
 
     # 取最新的一個分區(路徑格式: raw/industry_list_tpex/dt=YYYY-MM-DD/data.json)
     latest_blob = sorted(blobs, key=lambda b: b.name)[-1]
@@ -68,7 +69,8 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 
         if result:
             content = json.dumps(result, ensure_ascii=False)
-            write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id, content)
+            write_raw_partitioned(client, BUCKET_NAME,
+                                  SOURCE_NAME, "stock_id", stock_id, content)
             succeeded += 1
         else:
             failed.append(stock_id)
@@ -93,7 +95,7 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 #     # print(f"總數: {len(stock_ids)}")
 #     # print(f"是否有重複代號: {len(stock_ids) != len(set(stock_ids))}")
 #     # print(f"是否有非字串型態: {any(not isinstance(s, str) for s in stock_ids)}")
-    
+
 #     # 先用小規模測試:只抓近 10 天,而且先手動抽 3 檔測試,不要一開始就跑全部 891 檔
 #     # (下面這行先註解掉全市場清單讀取,直接手動指定測試名單)
 #     test_run = False

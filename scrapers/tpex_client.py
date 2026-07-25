@@ -11,6 +11,7 @@ TPEx 每日全市場收盤行情爬蟲(上櫃)
 
 import sys
 import requests
+from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -74,8 +75,9 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
     rows = table.get("data", [])
 
     actual_roc_date = table.get("date")  # 民國格式,用來確認實際拿到的是哪一天，例如 '115/07/09'
-    actual_trade_date = roc_to_gregorian(actual_roc_date) if actual_roc_date else None
-    
+    actual_trade_date = roc_to_gregorian(
+        actual_roc_date) if actual_roc_date else None
+
     fields_ok = validate_fields(actual_fields)
     print(f"✅ TPEx 實際回傳日期: {actual_trade_date},取得 {len(rows)} 筆資料"
           f"(欄位結構{'正常' if fields_ok else '⚠️ 已變動,見上方警告'})")
@@ -91,9 +93,8 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
 
 # if __name__ == "__main__":
 #     import json
-#     from datetime import date
 #     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
-    
+
 #     target_date = date(2026, 7, 9)
 #     result  = fetch_daily_quotes(target_date)
 

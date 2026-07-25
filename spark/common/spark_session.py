@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 # 自動載入專案根目錄的 .env
 load_dotenv()
 
+
 def build_spark_session(app_name: str) -> SparkSession:
     """
     建立含 GCS Connector 設定的 SparkSession。

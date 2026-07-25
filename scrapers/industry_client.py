@@ -43,7 +43,8 @@ def fetch_industry_list(market: str) -> list[dict] | None:
     resp.raise_for_status()
 
     text = resp.content.decode("utf-8-sig")
-    df = pd.read_csv(io.StringIO(text), dtype=str)  # 全部當字串讀,避免代號被誤判成數字型態(例如去掉開頭的 0)
+    # 全部當字串讀,避免代號被誤判成數字型態(例如去掉開頭的 0)
+    df = pd.read_csv(io.StringIO(text), dtype=str)
 
     records = df.to_dict(orient="records")
     print(f"✅ {market} 取得 {len(records)} 筆公司基本資料")
@@ -54,7 +55,7 @@ def fetch_industry_list(market: str) -> list[dict] | None:
 #     import json
 #     from datetime import date
 #     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
-  
+
 #     client = get_gcs_client()
 #     today = date.today()
 
@@ -69,7 +70,7 @@ def fetch_industry_list(market: str) -> list[dict] | None:
 #             with open(f"local_output/industry_list_{market.lower()}.json", "w", encoding="utf-8") as f:
 #                 json.dump(records, f, ensure_ascii=False)
 #             print(f"\n✅ 已存到 local_output/industry_list_{market.lower()}.json")
-        
+
 #             content = json.dumps(records, ensure_ascii=False)
 #             write_raw_json(
 #                 client=client,

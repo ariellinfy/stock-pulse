@@ -36,7 +36,8 @@ def mark_no_trading_day(client, bucket_name: str, source_name: str, target_date:
     blob_path = f"raw/{source_name}/dt={dt_str}/_no_data_marker.json"
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
-    blob.upload_from_string('{"status": "confirmed_no_trading_day"}', content_type="application/json")
+    blob.upload_from_string(
+        '{"status": "confirmed_no_trading_day"}', content_type="application/json")
 
 
 def is_marked_no_trading_day(client, bucket_name: str, source_name: str, target_date: date) -> bool:
@@ -83,7 +84,8 @@ def backfill_twse(start: date, end: date):
         succeeded += 1
 
     print(f"\n=== 回補完成 ===")
-    print(f"成功: {succeeded} / 跳過(已存在): {skipped} / 確認非交易日: {no_trading} / 待重試: {failed}")
+    print(
+        f"成功: {succeeded} / 跳過(已存在): {skipped} / 確認非交易日: {no_trading} / 待重試: {failed}")
 
 
 if __name__ == "__main__":
@@ -91,7 +93,8 @@ if __name__ == "__main__":
     from datetime import datetime
 
     parser = argparse.ArgumentParser(description="TWSE 歷史資料回補")
-    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--start-date", required=True,
+                        help="起始日期,格式 YYYY-MM-DD")
     parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
     args = parser.parse_args()
 

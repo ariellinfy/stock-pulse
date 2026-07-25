@@ -23,7 +23,7 @@ def assert_fields_match(actual_fields: list[str], expected_fields: list[str], so
             f"這代表 schema 定義可能已經過期,需要重新核對並更新 TPEX_RAW_SCHEMA"
         )
     print(f"✅ {source_name} 欄位順序驗證通過,共 {len(actual_fields)} 欄")
-    
+
 
 # 對應我們在 twse_client.py 裡驗證過的 16 個欄位,順序一致
 TWSE_RAW_SCHEMA = StructType([
@@ -36,7 +36,8 @@ TWSE_RAW_SCHEMA = StructType([
     StructField("high_price", StringType(), nullable=True),
     StructField("low_price", StringType(), nullable=True),
     StructField("close_price", StringType(), nullable=True),
-    StructField("change_symbol_raw", StringType(), nullable=True),  # 含 HTML tag,例如 <p style='color:red'>+</p>
+    # 含 HTML tag,例如 <p style='color:red'>+</p>
+    StructField("change_symbol_raw", StringType(), nullable=True),
     StructField("change_amount", StringType(), nullable=True),
     StructField("last_bid_price", StringType(), nullable=True),
     StructField("last_bid_volume", StringType(), nullable=True),
@@ -53,7 +54,8 @@ TPEX_RAW_SCHEMA = StructType([
     StructField("stock_id", StringType(), nullable=False),
     StructField("stock_name", StringType(), nullable=True),
     StructField("close_price", StringType(), nullable=True),
-    StructField("change_symbol_raw", StringType(), nullable=True),  # TPEx 這裡不含 HTML tag,格式跟 TWSE 不同,要驗證
+    # TPEx 這裡不含 HTML tag,格式跟 TWSE 不同,要驗證
+    StructField("change_symbol_raw", StringType(), nullable=True),
     StructField("open_price", StringType(), nullable=True),
     StructField("high_price", StringType(), nullable=True),
     StructField("low_price", StringType(), nullable=True),
@@ -66,7 +68,8 @@ TPEX_RAW_SCHEMA = StructType([
     StructField("last_ask_price", StringType(), nullable=True),
     StructField("last_ask_volume", StringType(), nullable=True),
     StructField("issued_shares", StringType(), nullable=True),        # TWSE 沒有
-    StructField("next_day_reference_price", StringType(), nullable=True),  # TWSE 沒有
+    StructField("next_day_reference_price",
+                StringType(), nullable=True),  # TWSE 沒有
     StructField("next_day_limit_up", StringType(), nullable=True),    # TWSE 沒有
     StructField("next_day_limit_down", StringType(), nullable=True),  # TWSE 沒有
 ])
@@ -75,5 +78,6 @@ TPEX_RAW_SCHEMA = StructType([
 FEAR_GREED_SCHEMA = StructType([
     StructField("x", DoubleType(), nullable=False),   # Unix 毫秒時間戳(浮點數)
     StructField("y", DoubleType(), nullable=True),    # 指數分數
-    StructField("rating", StringType(), nullable=True),  # 文字評級(fear/neutral/greed 等)
+    # 文字評級(fear/neutral/greed 等)
+    StructField("rating", StringType(), nullable=True),
 ])

@@ -30,14 +30,16 @@ def clean_single_day(spark, bucket_name: str, target_date: str, twse_official_id
     # 不需要像 backfill 版本那樣 explode 多天份的巢狀結構
     twse_raw_json = spark.read.option("multiline", "true").json(twse_path)
     twse_df = spark.createDataFrame(
-        twse_raw_json.select(F.explode("data").alias("row")).rdd.map(lambda r: r["row"]),
+        twse_raw_json.select(F.explode("data").alias("row")
+                             ).rdd.map(lambda r: r["row"]),
         schema=TWSE_RAW_SCHEMA
     )
     twse_df = twse_df.withColumn("dt", F.lit(target_date))
 
     tpex_raw_json = spark.read.option("multiline", "true").json(tpex_path)
     tpex_df = spark.createDataFrame(
-        tpex_raw_json.select(F.explode("data").alias("row")).rdd.map(lambda r: r["row"]),
+        tpex_raw_json.select(F.explode("data").alias("row")
+                             ).rdd.map(lambda r: r["row"]),
         schema=TPEX_RAW_SCHEMA
     )
     tpex_df = tpex_df.withColumn("dt", F.lit(target_date))
