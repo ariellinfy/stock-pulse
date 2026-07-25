@@ -2,7 +2,7 @@ import streamlit as st
 
 from db import get_bq_client
 from filters import render_date_range_selector
-from pages_content import overview, industry_sentiment, stock_detail
+from pages_content import overview, industry_sentiment, stock_detail, pipeline_health
 
 st.set_page_config(page_title="stock-pulse", layout="wide")
 
@@ -24,7 +24,7 @@ start_date_filter = render_date_range_selector()
 
 st.divider()
 
-tab1, tab2, tab3 = st.tabs(["📊 今日市場總覽", "🏭 產業 vs 情緒", "🔍 個股技術分析"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 今日市場總覽", "🏭 產業 vs 情緒", "🔍 個股技術分析", "🩺 管線健康度"])
 
 with tab1:
     overview.render(client)
@@ -34,3 +34,6 @@ with tab2:
 
 with tab3:
     stock_detail.render(client, start_date_filter)
+
+with tab4:
+    pipeline_health.render(client)

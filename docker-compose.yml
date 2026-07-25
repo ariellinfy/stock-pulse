@@ -21,6 +21,7 @@ x-airflow-common: &airflow-common
     GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     GCP_SA_KEY_PATH: /opt/airflow/secrets/gcp-sa-key.json
     AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT: 'google-cloud-platform://?key_path=%2Fopt%2Fairflow%2Fsecrets%2Fgcp-sa-key.json&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&project=stock-pulse-260629'
+    SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
   group_add:
     - "1001"
   volumes:

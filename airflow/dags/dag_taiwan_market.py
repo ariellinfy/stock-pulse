@@ -9,8 +9,8 @@ import os
 import sys
 from datetime import datetime, timedelta
 
+from docker.types import Mount
 from airflow import DAG
-
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.standard.operators.python import ShortCircuitOperator
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -21,7 +21,7 @@ from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryDeleteTableOperator,
 )
 
-from docker.types import Mount
+from shared.alerting import log_success, send_slack_alert
 
 sys.path.insert(0, "/opt/airflow/project")
 
@@ -60,6 +60,15 @@ def run_twse_scraper(**context):
 
     assert result.data is not None  # status == SUCCESS,data 保證有值
 
+    if not result.data.get("fields_match_expected", True):
+        # 不直接 raise 讓任務失敗(資料本身還是有效、可以繼續處理),
+        # 但這是需要人工關注的訊號,單獨觸發告警
+        raise ValueError(
+            f"⚠️ {target_date} TWSE 欄位結構與預期不符!"
+            f"實際欄位: {result.data.get('fields')}。"
+            f"這代表 TWSE API 可能已調整格式,需要人工檢查並更新 schema 定義。"
+        )
+
     client = get_gcs_client()
     content = json.dumps(result, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, "twse_daily", target_date, content)
@@ -79,6 +88,15 @@ def run_tpex_scraper(**context):
     result = fetch_daily_quotes(target_date)
     if result is None:
         raise ValueError(f"TPEx 抓取失敗或無資料")
+
+    if not result.get("fields_match_expected", True):
+        # 不直接 raise 讓任務失敗(資料本身還是有效、可以繼續處理),
+        # 但這是需要人工關注的訊號,單獨觸發告警
+        raise ValueError(
+            f"⚠️ {target_date} TPEX 欄位結構與預期不符!"
+            f"實際欄位: {result.get('fields')}。"
+            f"這代表 TPEX API 可能已調整格式,需要人工檢查並更新 schema 定義。"
+        )
 
     client = get_gcs_client()
     content = json.dumps(result, ensure_ascii=False)
@@ -113,6 +131,8 @@ default_args = {
     "owner": "stock-pulse",
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
+    "on_failure_callback": send_slack_alert,
+    "on_success_callback": log_success,
 }
 
 

@@ -9,6 +9,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 
+from docker.types import Mount
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -19,7 +20,7 @@ from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryDeleteTableOperator,
 )
 
-from docker.types import Mount
+from shared.alerting import log_success, send_slack_alert
 
 sys.path.insert(0, "/opt/airflow/project")
 
@@ -47,6 +48,8 @@ default_args = {
     "owner": "stock-pulse",
     "retries": 2,
     "retry_delay": timedelta(minutes=30),
+    "on_failure_callback": send_slack_alert,
+    "on_success_callback": log_success,
 }
 
 
