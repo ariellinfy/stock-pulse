@@ -88,12 +88,9 @@ def check_single_day_twse_completeness(
     rows = content.get("data", [])
     actual_ids = set(row[0] for row in rows)
 
-    from datetime import datetime
-
-    trade_date_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
-    should_exist_today = {
-        sid for sid in twse_official_ids
-    }  # 簡化: 用完整清單即可,新股上市邊界案例影響極小
+    should_exist_today = set(
+        twse_official_ids
+    )  # 簡化: 用完整清單即可,新股上市邊界案例影響極小
 
     missing = should_exist_today - actual_ids
     actual_ratio = (
