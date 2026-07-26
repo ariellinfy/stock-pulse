@@ -5,5 +5,13 @@ sources:
     dataset: stockpulse_staging
     tables:
       - name: raw_stock_daily
+        config:
+          freshness:
+            warn_after: {count: 30, period: hour}
+            error_after: {count: 48, period: hour}
       - name: raw_fear_greed
+        config:
+          freshness:
+            warn_after: {count: 30, period: hour}
+            error_after: {count: 48, period: hour}
       - name: raw_industry_list

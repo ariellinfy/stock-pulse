@@ -23,26 +23,32 @@ def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
         F.explode(F.col("fear_and_greed_historical.data")).alias("record")
     )
 
-    matched = exploded.select(
+    all_records = exploded.select(
         F.from_unixtime((F.col("record.x") / 1000).cast("long"), "yyyy-MM-dd").alias(
             "record_date"
         ),
         F.col("record.y").alias("score"),
         F.col("record.rating").alias("fear_greed_rating"),
-    ).filter(F.col("record_date") == target_date)
+    )
 
-    cleaned = matched.select(
-        F.lit(target_date).alias("dt"),
+    # 找出「小於等於 target_date」裡最新的一筆,而非要求精確相等。
+    # 這對應美股/台股交易日曆不完全重疊的情況(如台股週末,美股同樣休市,
+    # historical.data 裡不會有精確等於今天的記錄,應取用最近一個有效交易日的資料)
+    latest_available = (
+        all_records.filter(F.col("record_date") <= target_date)
+        .orderBy(F.desc("record_date"))
+        .limit(1)
+    )
+
+    count = latest_available.count()
+    if count == 0:
+        raise ValueError(f"{target_date} 在 historical.data 裡找不到任何 <= 此日期的記錄,清洗失敗")
+
+    cleaned = latest_available.select(
+        F.lit(target_date).alias("dt"),  # 仍以 target_date 當作 dt(對應每日排程的分區日期)
         F.round(F.col("score"), 2).alias("score"),
         "fear_greed_rating",
     )
-
-    count = cleaned.count()
-    if count == 0:
-        raise ValueError(f"{target_date} 在 historical.data 裡找不到對應記錄,清洗失敗")
-    if count > 1:
-        print(f"⚠️ {target_date} 找到 {count} 筆記錄(預期 1 筆),取第一筆")
-        cleaned = cleaned.limit(1)
 
     print(f"{target_date} Fear & Greed 清洗後總筆數: {cleaned.count()}")
     cleaned.show(truncate=False)

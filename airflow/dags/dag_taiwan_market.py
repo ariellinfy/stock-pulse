@@ -127,6 +127,26 @@ def run_industry_scraper(**context):
         print(f"✅ {market} 產業分類清單成功寫入 {len(records)} 筆")
 
 
+def run_completeness_check(**context):
+    from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
+    from scripts.scan_raw_data_gaps import (
+        check_single_day_twse_completeness,
+        check_single_day_tpex_completeness,
+    )
+
+    target_date = (
+        context["data_interval_end"].in_timezone("Asia/Taipei").date().isoformat()
+    )
+
+    twse_records = load_industry_list_from_gcs(BUCKET_NAME, "TWSE")
+    twse_official_ids = [r["公司代號"] for r in twse_records]
+    check_single_day_twse_completeness(BUCKET_NAME, target_date, twse_official_ids)
+
+    tpex_records = load_industry_list_from_gcs(BUCKET_NAME, "TPEx")
+    tpex_official_ids = [r["公司代號"] for r in tpex_records]
+    check_single_day_tpex_completeness(BUCKET_NAME, target_date, tpex_official_ids)
+
+
 default_args = {
     "owner": "stock-pulse",
     "retries": 2,
@@ -148,16 +168,6 @@ with DAG(
     check_trading_day_task = ShortCircuitOperator(
         task_id="check_trading_day",
         python_callable=check_trading_day,
-    )
-
-    fetch_twse = PythonOperator(
-        task_id="fetch_twse_daily",
-        python_callable=run_twse_scraper,
-    )
-
-    fetch_tpex = PythonOperator(
-        task_id="fetch_tpex_daily",
-        python_callable=run_tpex_scraper,
     )
 
     fetch_industry = PythonOperator(
@@ -185,6 +195,21 @@ with DAG(
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
             "GCP_BUCKET_NAME": "stock-pulse-data-lake",
         },
+    )
+
+    fetch_twse = PythonOperator(
+        task_id="fetch_twse_daily",
+        python_callable=run_twse_scraper,
+    )
+
+    fetch_tpex = PythonOperator(
+        task_id="fetch_tpex_daily",
+        python_callable=run_tpex_scraper,
+    )
+
+    check_completeness = PythonOperator(
+        task_id="check_twse_tpex_completeness",
+        python_callable=run_completeness_check,
     )
 
     clean_daily = DockerOperator(
@@ -257,10 +282,53 @@ with DAG(
         ],
     )
 
+    run_dbt_tests = DockerOperator(
+        task_id="run_dbt_tests",
+        image="stock-pulse-dbt",
+        api_version="auto",
+        auto_remove="success",
+        command="dbt test",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        mounts=[
+            Mount(
+                source="/home/fy/stock-pulse/secrets",
+                target="/app/secrets",
+                type="bind",
+                read_only=True,
+            ),
+        ],
+    )
+
+    run_freshness_check = DockerOperator(
+        task_id="run_freshness_check",
+        image="stock-pulse-dbt",
+        api_version="auto",
+        auto_remove="success",
+        command="dbt source freshness",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        mounts=[
+            Mount(
+                source="/home/fy/stock-pulse/secrets",
+                target="/app/secrets",
+                type="bind",
+                read_only=True,
+            ),
+        ],
+    )
+
     # 判斷是否為平日(週末跳過)
     check_trading_day_task >> [fetch_twse, fetch_tpex, fetch_industry]
     # 產業清單抓取+清洗 必須在 TWSE/TPEx 清洗之前完成(過濾要用最新清單)
     fetch_industry >> clean_industry >> clean_daily
-    [fetch_twse, fetch_tpex] >> clean_daily
+    [fetch_twse, fetch_tpex] >> check_completeness >> clean_daily
     # 刪除今天分區(避免重複)+載入BQ
-    clean_daily >> delete_today_stock_partition >> load_stock_to_bq >> run_dbt
+    (
+        clean_daily
+        >> delete_today_stock_partition
+        >> load_stock_to_bq
+        >> run_dbt
+        >> run_dbt_tests
+        >> run_freshness_check
+    )
