@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'dbt/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
