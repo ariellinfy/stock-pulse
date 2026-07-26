@@ -42,10 +42,14 @@ def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
 
     count = latest_available.count()
     if count == 0:
-        raise ValueError(f"{target_date} 在 historical.data 裡找不到任何 <= 此日期的記錄,清洗失敗")
+        raise ValueError(
+            f"{target_date} 在 historical.data 裡找不到任何 <= 此日期的記錄,清洗失敗"
+        )
 
     cleaned = latest_available.select(
-        F.lit(target_date).alias("dt"),  # 仍以 target_date 當作 dt(對應每日排程的分區日期)
+        F.lit(target_date).alias(
+            "dt"
+        ),  # 仍以 target_date 當作 dt(對應每日排程的分區日期)
         F.round(F.col("score"), 2).alias("score"),
         "fear_greed_rating",
     )

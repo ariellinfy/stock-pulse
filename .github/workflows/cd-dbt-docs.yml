@@ -1,0 +1,57 @@
+# .github/workflows/cd-dbt-docs.yml
+name: Deploy dbt Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dbt/**'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dbt
+        run: pip install dbt-bigquery
+      - name: Create profiles.yml with real credentials
+        run: |
+          mkdir -p ~/.dbt
+          echo '${{ secrets.GCP_DBT_DOCS_READONLY_KEY }}' > /tmp/gcp-key.json
+          cat > ~/.dbt/profiles.yml << EOF
+          stock_pulse:
+            target: dev
+            outputs:
+              dev:
+                type: bigquery
+                method: service-account
+                keyfile: /tmp/gcp-key.json
+                project: stock-pulse-260629
+                dataset: stockpulse_staging
+                threads: 4
+                location: us-west1
+          EOF
+      - name: dbt deps
+        working-directory: dbt
+        run: dbt deps
+      - name: Generate dbt docs
+        working-directory: dbt
+        run: dbt docs generate --no-partial-parse
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dbt/target
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
