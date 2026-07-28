@@ -128,16 +128,18 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 #             end_date=date(2026, 7, 16),
 #         )
 
-# if __name__ == "__main__":
-#     import argparse
-#     from datetime import datetime
+if __name__ == "__main__":
+    import argparse
+    from datetime import datetime
 
-#     parser = argparse.ArgumentParser(description="TPEx 歷史資料回補(透過 Yahoo Finance)")
-#     parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
-#     parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
-#     args = parser.parse_args()
+    parser = argparse.ArgumentParser(
+        description="TPEx 歷史資料回補(透過 Yahoo Finance)"
+    )
+    parser.add_argument("--start-date", required=True, help="起始日期,格式 YYYY-MM-DD")
+    parser.add_argument("--end-date", required=True, help="結束日期,格式 YYYY-MM-DD")
+    args = parser.parse_args()
 
-#     start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-#     end = datetime.strptime(args.end_date, "%Y-%m-%d").date()
+    start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(args.end_date, "%Y-%m-%d").date()
 
-#     backfill_yahoo_tpex(start_date=start, end_date=end)
+    backfill_yahoo_tpex(start_date=start, end_date=end)

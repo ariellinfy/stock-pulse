@@ -1,11 +1,10 @@
 """
-歷史資料回補 CLI
+TWSE 歷史回補(透過 官方 API)
 
-目前階段: 先驗證 TWSE 回補邏輯(小規模測試),TPEx(Yahoo)/Fear&Greed
-之後再加進來。
+分區方式: 按日期(dt=yyyy-MM-dd)。
 
 執行方式:
-    python scripts/backfill_twse.py
+    python -m scripts.backfill_twse
 """
 
 import sys

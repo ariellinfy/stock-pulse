@@ -21,7 +21,7 @@ def get_required_env(key: str) -> str:
 
 
 BUCKET_NAME: str = get_required_env("GCP_BUCKET_NAME")
-SA_KEY_PATH: str = os.environ.get("GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json")
+SA_KEY_PATH: str = get_required_env("GCP_SA_KEY_PATH")
 
 
 def get_gcs_client(key_path: str | None = None) -> storage.Client:

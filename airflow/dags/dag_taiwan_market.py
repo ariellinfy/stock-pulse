@@ -70,7 +70,7 @@ def run_twse_scraper(**context):
         )
 
     client = get_gcs_client()
-    content = json.dumps(result, ensure_ascii=False)
+    content = json.dumps(result.data, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, "twse_daily", target_date, content)
     print(f"✅ TWSE 成功寫入 {len(result.data['data'])} 筆資料")
 
@@ -129,7 +129,7 @@ def run_industry_scraper(**context):
 
 def run_completeness_check(**context):
     from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
-    from scripts.scan_raw_data_gaps import (
+    from shared.scan_raw_data_gaps import (
         check_single_day_twse_completeness,
         check_single_day_tpex_completeness,
     )
