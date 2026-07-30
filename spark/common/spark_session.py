@@ -4,11 +4,13 @@
 """
 
 import os
-from pyspark.sql import SparkSession
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
 
-# 自動載入專案根目錄的 .env
-load_dotenv()
+from pyspark.sql import SparkSession
+
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+from shared.utils import get_required_env  # 順帶載入 shared/utils.py 的 load_dotenv()
 
 
 def build_spark_session(app_name: str) -> SparkSession:
@@ -22,12 +24,7 @@ def build_spark_session(app_name: str) -> SparkSession:
         GCP_SA_KEY_PATH: GCP Service Account 金鑰路徑(必填)
     """
     gcs_jar_path = os.environ.get("SPARK_GCS_JAR_PATH")  # 選填,不再強制檢查
-    gcp_key_path = os.environ.get("GCP_SA_KEY_PATH")
-
-    if not gcp_key_path:
-        raise RuntimeError(
-            "缺少必要環境變數 GCP_SA_KEY_PATH,請確認 .env 檔案已正確設定並載入"
-        )
+    gcp_key_path = get_required_env("GCP_SA_KEY_PATH")
 
     builder = (
         SparkSession.builder.appName(app_name)

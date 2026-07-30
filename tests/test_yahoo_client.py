@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import pandas as pd
 
+from scrapers.common import FetchStatus
 from scrapers.yahoo_client import build_yahoo_ticker, fetch_yahoo_history
 
 
@@ -39,7 +40,8 @@ def test_fetch_yahoo_history_success_returns_records():
     with patch("scrapers.yahoo_client.yf.Ticker", return_value=mock_ticker):
         result = fetch_yahoo_history("2330", "TWSE", date(2026, 7, 8), date(2026, 7, 8))
 
-    assert result == [
+    assert result.status == FetchStatus.SUCCESS
+    assert result.data == [
         {
             "stock_id": "2330",
             "market": "TWSE",
@@ -53,15 +55,15 @@ def test_fetch_yahoo_history_success_returns_records():
     ]
 
 
-def test_fetch_yahoo_history_empty_returns_none():
-    """新股/下市/非交易區間時 yfinance 回傳空 DataFrame,應直接回傳 None,不重試。"""
+def test_fetch_yahoo_history_empty_returns_no_data():
+    """新股/下市/非交易區間時 yfinance 回傳空 DataFrame,確認無資料,不重試。"""
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = pd.DataFrame()
 
     with patch("scrapers.yahoo_client.yf.Ticker", return_value=mock_ticker):
         result = fetch_yahoo_history("0000", "TWSE", date(2026, 7, 8), date(2026, 7, 8))
 
-    assert result is None
+    assert result.status == FetchStatus.NO_DATA
     mock_ticker.history.assert_called_once()  # 空資料不算暫時性錯誤,不需要重試
 
 
@@ -76,7 +78,7 @@ def test_fetch_yahoo_history_exhausts_retries_on_exception():
             "2330", "TWSE", date(2026, 7, 8), date(2026, 7, 8), max_retries=3
         )
 
-    assert result is None
+    assert result.status == FetchStatus.UNKNOWN_FAILURE
     assert mock_ticker.history.call_count == 3
 
 
@@ -84,6 +86,6 @@ if __name__ == "__main__":
     test_build_yahoo_ticker_appends_market_suffix()
     test_build_yahoo_ticker_rejects_unknown_market()
     test_fetch_yahoo_history_success_returns_records()
-    test_fetch_yahoo_history_empty_returns_none()
+    test_fetch_yahoo_history_empty_returns_no_data()
     test_fetch_yahoo_history_exhausts_retries_on_exception()
     print("✅ 全部測試通過")

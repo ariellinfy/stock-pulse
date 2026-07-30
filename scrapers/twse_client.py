@@ -12,12 +12,11 @@ TWSE 每日全市場收盤行情爬蟲
 import sys
 import time
 import requests
-from enum import Enum
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrapers.common import FetchStatus, FetchResult
 
 TWSE_URL = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 DAILY_QUOTES_TABLE_INDEX = 8  # 「每日收盤行情(全部...)」在 tables 陣列中的位置
@@ -46,18 +45,6 @@ EXPECTED_FIELDS = [
     "最後揭示賣量",
     "本益比",
 ]
-
-
-class FetchStatus(Enum):
-    SUCCESS = "success"
-    NO_TRADING_DAY = "no_trading_day"
-    UNKNOWN_FAILURE = "unknown_failure"
-
-
-@dataclass
-class FetchResult:
-    status: FetchStatus
-    data: dict | None = None
 
 
 def validate_fields(actual_fields: list[str]) -> bool:
@@ -93,7 +80,7 @@ def _fetch_daily_quotes(
 
     confirm_no_trading_day 是兩個呼叫端唯一的行為差異:
       - True (僅限已確定過去的歷史日期):連續 no_data_confirm_attempts 次收到
-        無資料回應後,才判定為 NO_TRADING_DAY。
+        無資料回應後,才判定為 NO_DATA。
       - False (每日例行排程專用):完全不做這個判斷,查無資料立刻回傳
         UNKNOWN_FAILURE,交由呼叫端視為「未知,稍後重試」。
 
@@ -104,7 +91,7 @@ def _fetch_daily_quotes(
 
     回傳 FetchResult - status 有三種可能:
           - SUCCESS: 成功取得資料,data 欄位有值
-          - NO_TRADING_DAY: 僅在 confirm_no_trading_day=True 時才可能出現,
+          - NO_DATA: 僅在 confirm_no_trading_day=True 時才可能出現,
                              代表連續 no_data_confirm_attempts 次都確認無資料
           - UNKNOWN_FAILURE: 請求本身失敗,或無法判斷當天狀態,需要之後重試
 
@@ -165,7 +152,7 @@ def _fetch_daily_quotes(
                 print(
                     f"✅ {date_str} 已連續 {no_data_confirm_attempts} 次確認,判定為非交易日"
                 )
-                return FetchResult(status=FetchStatus.NO_TRADING_DAY)
+                return FetchResult(status=FetchStatus.NO_DATA)
 
             time.sleep(2)  # 兩次確認之間稍微間隔,避免瞬間重複打到同一個暫時性問題
             continue
@@ -210,7 +197,7 @@ def fetch_daily_quotes_for_backfill(
     抓取指定日期的全市場個股收盤行情原始資料(未清洗)——僅供「歷史回補」使用。
 
     僅限已確定過去的日期:內部靠「連續 no_data_confirm_attempts 次、間隔數秒的
-    確認」來判定 NO_TRADING_DAY,對已經過去很久的歷史日期來說沒有歧義,但對
+    確認」來判定 NO_DATA,對已經過去很久的歷史日期來說沒有歧義,但對
     今天/近期的日期而言這種確認方式完全來不及分辨「還沒統計完」跟「真的休市」。
     因此每日例行排程(current-day)一律改用 fetch_daily_quotes_for_daily_schedule,
     不要在這裡呼叫本函式。詳細行為說明見 _fetch_daily_quotes。

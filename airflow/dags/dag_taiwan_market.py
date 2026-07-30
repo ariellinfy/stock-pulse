@@ -6,7 +6,6 @@ dag_taiwan_market:每日例行排程
 """
 
 import os
-import sys
 from datetime import datetime, timedelta
 
 from docker.types import Mount
@@ -30,8 +29,6 @@ from shared.utils import (
     raw_industry_list_source_name,
     gcs_uri,
 )
-
-sys.path.insert(0, "/opt/airflow/project")
 
 
 def check_trading_day(**context):
@@ -89,6 +86,7 @@ def run_twse_scraper(**context):
 
 def run_tpex_scraper(**context):
     from scrapers.tpex_client import fetch_daily_quotes
+    from scrapers.common import FetchStatus
     from shared.utils import get_gcs_client, write_raw_json
     import json
 
@@ -98,28 +96,36 @@ def run_tpex_scraper(**context):
     # 提醒: TPEx 官方端點固定回傳「當下最新交易日」,不保證等於 target_date
     # 這是 2.2 就確認過的已知限制,例行排程本來就是抓當天,行為上是對的
     result = fetch_daily_quotes(target_date)
-    if result is None:
-        raise ValueError(f"TPEx 抓取失敗或無資料")
+    if result.status != FetchStatus.SUCCESS:
+        # NO_DATA 跟 UNKNOWN_FAILURE 一律視為失敗(維持既有行為不變):目前沒有
+        # 證據顯示 TPEx 端點在「資料尚未彙整完成」時也會回應 tables 為空,若之後
+        # 確認有這種歧義,再比照 TWSE 的作法拆開處理。
+        raise ValueError(f"{target_date} TPEx 抓取失敗或無資料")
 
-    if not result.get("fields_match_expected", True):
-        # 不直接 raise 讓任務失敗(資料本身還是有效、可以繼續處理),
-        # 但這是需要人工關注的訊號,單獨觸發告警
-        raise ValueError(
-            f"⚠️ {target_date} TPEX 欄位結構與預期不符!"
-            f"實際欄位: {result.get('fields')}。"
-            f"這代表 TPEX API 可能已調整格式,需要人工檢查並更新 schema 定義。"
-        )
+    assert result.data is not None  # status == SUCCESS,data 保證有值
 
     client = get_gcs_client()
-    content = json.dumps(result, ensure_ascii=False)
+    content = json.dumps(result.data, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, RAW_TPEX_DAILY, target_date, content)
     print(
-        f"✅ TPEx 成功寫入 {len(result['data'])} 筆資料,實際日期: {result.get('actual_trade_date')}"
+        f"✅ TPEx 成功寫入 {len(result.data['data'])} 筆資料,"
+        f"實際日期: {result.data.get('actual_trade_date')}"
     )
+
+    if not result.data.get("fields_match_expected", True):
+        # 資料已寫入 GCS(格式仍可用,不會遺失),但欄位跟預期不同,需要人工檢查
+        # 並更新 schema 定義,因此仍讓這個 task 失敗以觸發告警
+        raise ValueError(
+            f"⚠️ {target_date} TPEX 欄位結構與預期不符!"
+            f"實際欄位: {result.data.get('fields')}。"
+            f"這代表 TPEX API 可能已調整格式,需要人工檢查並更新 schema 定義"
+            f"(資料已寫入 GCS,不會遺失)。"
+        )
 
 
 def run_industry_scraper(**context):
     from scrapers.industry_client import fetch_industry_list
+    from scrapers.common import FetchStatus
     from shared.utils import get_gcs_client, write_raw_json
     from datetime import date
     import json
@@ -128,10 +134,11 @@ def run_industry_scraper(**context):
     today = date.today()
 
     for market in ("TWSE", "TPEx"):
-        records = fetch_industry_list(market)
-        if records is None:
+        result = fetch_industry_list(market)
+        if result.status != FetchStatus.SUCCESS:
             raise ValueError(f"{market} 產業分類清單抓取失敗")
 
+        records = result.data
         content = json.dumps(records, ensure_ascii=False)
         write_raw_json(
             client, BUCKET_NAME, raw_industry_list_source_name(market), today, content

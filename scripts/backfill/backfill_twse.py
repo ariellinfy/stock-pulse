@@ -20,7 +20,8 @@ from shared.utils import (
     write_raw_json,
     raw_blob_exists,
 )
-from scrapers.twse_client import FetchStatus, fetch_daily_quotes_for_backfill
+from scrapers.common import FetchStatus
+from scrapers.twse_client import fetch_daily_quotes_for_backfill
 
 SOURCE_NAME = RAW_TWSE_DAILY
 
@@ -77,7 +78,7 @@ def backfill_twse(start: date, end: date):
 
         result = fetch_daily_quotes_for_backfill(target_date)
 
-        if result.status == FetchStatus.NO_TRADING_DAY:
+        if result.status == FetchStatus.NO_DATA:
             mark_no_trading_day(client, BUCKET_NAME, SOURCE_NAME, target_date)
             no_trading += 1
             continue

@@ -20,6 +20,7 @@ from shared.utils import (
     write_raw_partitioned,
     raw_blob_exists_partitioned,
 )
+from scrapers.common import FetchStatus
 from scrapers.fear_greed_client import fetch_fear_greed_full_history
 
 SOURCE_NAME = RAW_FEAR_GREED_HISTORY
@@ -37,11 +38,11 @@ def backfill_fear_greed(start_date: date):
         return
 
     result = fetch_fear_greed_full_history(start_date)
-    if result is None:
+    if result.status != FetchStatus.SUCCESS:
         print("❌ 無法取得 Fear & Greed 歷史資料")
         return
 
-    content = json.dumps(result, ensure_ascii=False)
+    content = json.dumps(result.data, ensure_ascii=False)
     write_raw_partitioned(
         client, BUCKET_NAME, SOURCE_NAME, "range", PARTITION_VALUE, content
     )

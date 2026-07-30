@@ -1,5 +1,8 @@
 from unittest.mock import patch, Mock
 
+import requests
+
+from scrapers.common import FetchStatus
 from scrapers.industry_client import fetch_industry_list
 
 
@@ -15,9 +18,10 @@ def test_fetch_industry_list_success_parses_all_rows_as_strings():
     with patch(
         "scrapers.industry_client.requests.get", return_value=_csv_response(csv_text)
     ):
-        records = fetch_industry_list("TWSE")
+        result = fetch_industry_list("TWSE")
 
-    assert records == [
+    assert result.status == FetchStatus.SUCCESS
+    assert result.data == [
         {"公司代號": "1101", "公司名稱": "台泥", "產業別": "水泥工業"},
         {"公司代號": "0050", "公司名稱": "元大台灣50", "產業別": "ETF"},
     ]
@@ -32,18 +36,37 @@ def test_fetch_industry_list_keeps_leading_zero_stock_ids():
     with patch(
         "scrapers.industry_client.requests.get", return_value=_csv_response(csv_text)
     ):
-        records = fetch_industry_list("TWSE")
+        result = fetch_industry_list("TWSE")
 
-    assert records[0]["公司代號"] == "0050"
+    assert result.data[0]["公司代號"] == "0050"
 
 
-def test_fetch_industry_list_unknown_market_returns_none():
-    result = fetch_industry_list("NYSE")
-    assert result is None
+def test_fetch_industry_list_unknown_market_raises_value_error():
+    """
+    未知市場別是呼叫端傳錯參數(programming error),不是執行期的資料狀態,
+    應該直接 raise,而不是包裝成一種「失敗結果」悄悄回傳。
+    """
+    try:
+        fetch_industry_list("NYSE")
+        raise AssertionError("不支援的 market 應該要 raise ValueError")
+    except ValueError:
+        pass
+
+
+def test_fetch_industry_list_request_exception_returns_unknown_failure():
+    with patch(
+        "scrapers.industry_client.requests.get",
+        side_effect=requests.exceptions.ConnectionError("boom"),
+    ):
+        result = fetch_industry_list("TWSE")
+
+    assert result.status == FetchStatus.UNKNOWN_FAILURE
+    assert result.data is None
 
 
 if __name__ == "__main__":
     test_fetch_industry_list_success_parses_all_rows_as_strings()
     test_fetch_industry_list_keeps_leading_zero_stock_ids()
-    test_fetch_industry_list_unknown_market_returns_none()
+    test_fetch_industry_list_unknown_market_raises_value_error()
+    test_fetch_industry_list_request_exception_returns_unknown_failure()
     print("✅ 全部測試通過")

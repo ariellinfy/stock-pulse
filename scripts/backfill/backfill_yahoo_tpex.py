@@ -26,6 +26,7 @@ from shared.utils import (
     raw_blob_exists_partitioned,
     raw_industry_list_source_name,
 )
+from scrapers.common import FetchStatus
 from scrapers.yahoo_client import fetch_yahoo_history
 
 SOURCE_NAME = RAW_YAHOO_TPEX_HISTORY
@@ -78,8 +79,8 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
         print(f"[{i}/{len(stock_ids)}] 抓取 {stock_id}...")
         result = fetch_yahoo_history(stock_id, "TPEx", start_date, end_date)
 
-        if result:
-            content = json.dumps(result, ensure_ascii=False)
+        if result.status == FetchStatus.SUCCESS:
+            content = json.dumps(result.data, ensure_ascii=False)
             write_raw_partitioned(
                 client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id, content
             )
@@ -121,8 +122,8 @@ def backfill_yahoo_tpex(start_date: date, end_date: date, delay_seconds: float =
 
 #         for stock_id in test_stocks:
 #             result = fetch_yahoo_history(stock_id, "TPEx", start, end)
-#             if result:
-#                 content = json.dumps(result, ensure_ascii=False)
+#             if result.status == FetchStatus.SUCCESS:
+#                 content = json.dumps(result.data, ensure_ascii=False)
 #                 write_raw_partitioned(client, BUCKET_NAME, SOURCE_NAME, "stock_id", stock_id, content)
 #             time.sleep(1.5)
 #     else:

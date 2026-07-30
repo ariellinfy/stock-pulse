@@ -15,6 +15,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrapers.common import FetchStatus, FetchResult
 
 URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 
@@ -41,10 +42,13 @@ def validate_schema(payload: dict) -> bool:
     return True
 
 
-def fetch_fear_greed(start_date: date) -> dict | None:
+def fetch_fear_greed(start_date: date) -> FetchResult:
     """
     抓取從 start_date 到今天的 Fear & Greed 資料(含歷史數列跟即時值)。
-    非官方端點,任何失敗都只記錄 log、回傳 None,不拋例外。
+    非官方端點,任何失敗都只記錄 log、回傳 UNKNOWN_FAILURE,不拋例外。
+
+    沒有 NO_DATA 這個狀態:這不是交易日曆,一旦抓取失敗就是真的異常
+    (網路問題、回應格式改變等),不存在「本來就該是空的」情境。
     """
     date_str = start_date.isoformat()
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -55,23 +59,25 @@ def fetch_fear_greed(start_date: date) -> dict | None:
         payload = resp.json()
     except requests.exceptions.RequestException as e:
         print(f"❌ CNN Fear & Greed 請求失敗: {e}")
-        return None
+        return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
     except json.JSONDecodeError as e:
         print(f"❌ CNN Fear & Greed 回應不是合法 JSON: {e}")
-        return None
+        return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
 
     if not validate_schema(payload):
-        return None
+        return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
 
     fg = payload["fear_and_greed"]
     print(
         f"✅ 取得 Fear & Greed 即時值: score={fg['score']:.2f}, rating={fg['rating']}"
     )
 
-    return payload  # 忠實回傳整包,不篩選欄位
+    return FetchResult(
+        status=FetchStatus.SUCCESS, data=payload
+    )  # 忠實回傳整包,不篩選欄位
 
 
-def fetch_fear_greed_full_history(start_date: date) -> dict | None:
+def fetch_fear_greed_full_history(start_date: date) -> FetchResult:
     """
     一次性抓取從 start_date 到今天的完整 Fear & Greed 歷史。
     用於 2.3 歷史回補,只需呼叫一次,不需要迴圈。
@@ -88,10 +94,10 @@ def fetch_fear_greed_full_history(start_date: date) -> dict | None:
 #     start_date = date.today() - timedelta(days=3)
 #     result = fetch_fear_greed(start_date)
 
-#     if result:
+#     if result.status == FetchStatus.SUCCESS:
 #         client = get_gcs_client()
 
-#         content = json.dumps(result, ensure_ascii=False)
+#         content = json.dumps(result.data, ensure_ascii=False)
 #         write_raw_json(
 #             client=client,
 #             bucket_name=BUCKET_NAME,

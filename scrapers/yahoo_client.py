@@ -17,6 +17,7 @@ from pathlib import Path
 import yfinance as yf
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrapers.common import FetchStatus, FetchResult
 
 
 def build_yahoo_ticker(stock_id: str, market: str) -> str:
@@ -46,14 +47,17 @@ def fetch_yahoo_history(
     start_date: date,
     end_date: date,
     max_retries: int = 3,
-) -> list[dict] | None:
+) -> FetchResult:
     """
     抓取單一股票在 [start_date, end_date] 區間(含頭含尾)的歷史資料。
 
     注意: yfinance 的 end 參數本身是不包含的,所以這裡內部會自動 +1 天,
           讓呼叫端可以用直覺的「含頭含尾」方式指定區間,不用自己記這個細節。
 
-    回傳: list of dict,每筆記錄一天。失敗或無資料回傳 None。
+    回傳 FetchResult - status 有三種可能:
+        - SUCCESS: 成功取得資料,data 是 list[dict],每筆記錄一天
+        - NO_DATA: 確認該區間無交易資料(新股、下市等),不需要重試
+        - UNKNOWN_FAILURE: 重試耗盡仍失敗,需要之後再試
     """
     ticker_symbol = build_yahoo_ticker(stock_id, market)
     yahoo_end = end_date + timedelta(days=1)  # 修正 yfinance 右邊界不含的行為
@@ -67,7 +71,7 @@ def fetch_yahoo_history(
 
             if hist.empty:
                 print(f"⚠️ {ticker_symbol} 無資料(可能是新股、下市或非交易區間)")
-                return None
+                return FetchResult(status=FetchStatus.NO_DATA)
 
             # 把 DatetimeIndex 轉成單純的日期字串,並保留原始股票代號/市場資訊
             records = []
@@ -86,7 +90,7 @@ def fetch_yahoo_history(
                 )
 
             print(f"✅ {ticker_symbol} 取得 {len(records)} 筆資料")
-            return records
+            return FetchResult(status=FetchStatus.SUCCESS, data=records)
 
         except Exception as e:
             print(f"⚠️ {ticker_symbol} 第 {attempt} 次嘗試失敗: {e}")
@@ -94,7 +98,7 @@ def fetch_yahoo_history(
                 time.sleep(3)
 
     print(f"❌ {ticker_symbol} 已達最大重試次數,放棄")
-    return None
+    return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
 
 
 def fetch_batch(

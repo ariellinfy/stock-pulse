@@ -15,6 +15,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
+from scrapers.common import FetchStatus, FetchResult
 
 TPEX_URL = "https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php"
 
@@ -67,24 +68,33 @@ def validate_fields(actual_fields: list[str]) -> bool:
     return True
 
 
-def fetch_daily_quotes(target_date: date) -> dict | None:
+def fetch_daily_quotes(target_date: date) -> FetchResult:
     """
     抓取「當日」上櫃全市場收盤行情(不論傳入的 target_date 是什麼,
     此 API 固定回傳呼叫當下的最新交易日資料 —— 這是已知限制,呼叫端
     應只在每日例行排程中使用本函式,不要用來做歷史回補)。
+
+    回傳 FetchResult - status 有三種可能:
+        - SUCCESS: 成功取得資料,data 是 dict(見下方欄位說明)
+        - NO_DATA: 確認為非交易日(tables 為空,TPEx 官方端點的既定行為)
+        - UNKNOWN_FAILURE: 請求失敗或回應格式異常,需要之後重試
     """
     roc_date_str = to_roc_date(target_date)
     params = {"l": "zh-tw", "d": roc_date_str, "s": "0,asc,0"}
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    resp = requests.get(TPEX_URL, params=params, headers=headers, timeout=15)
-    resp.raise_for_status()
-    payload = resp.json()
+    try:
+        resp = requests.get(TPEX_URL, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+        payload = resp.json()
+    except requests.exceptions.RequestException as e:
+        print(f"❌ TPEx 請求失敗: {e}")
+        return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
 
     tables = payload.get("tables", [])
     if not tables:
         print(f"⚠️ 無資料,可能是非交易日。回傳 date={payload.get('date')}")
-        return None
+        return FetchResult(status=FetchStatus.NO_DATA)
 
     table = tables[0]
     actual_fields = table.get("fields", [])
@@ -101,13 +111,16 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
         f"(欄位結構{'正常' if fields_ok else '⚠️ 已變動,見上方警告'})"
     )
 
-    return {
-        "fields": actual_fields,
-        "data": rows,
-        "fields_match_expected": fields_ok,
-        "actual_trade_date": actual_trade_date,  # 西元,給下游用
-        "actual_trade_date_roc": actual_roc_date,  # 民國,保留原始證據
-    }
+    return FetchResult(
+        status=FetchStatus.SUCCESS,
+        data={
+            "fields": actual_fields,
+            "data": rows,
+            "fields_match_expected": fields_ok,
+            "actual_trade_date": actual_trade_date,  # 西元,給下游用
+            "actual_trade_date_roc": actual_roc_date,  # 民國,保留原始證據
+        },
+    )
 
 
 # if __name__ == "__main__":
@@ -117,9 +130,9 @@ def fetch_daily_quotes(target_date: date) -> dict | None:
 #     target_date = date(2026, 7, 9)
 #     result  = fetch_daily_quotes(target_date)
 
-#     if result:
+#     if result.status == FetchStatus.SUCCESS:
 #         print("\n=== 前 2 筆原始資料(未清洗)===")
-#         for row in result["data"][:2]:
+#         for row in result.data["data"][:2]:
 #             print(row)
 
 #         # 存到本地檔案先驗證,還不上傳 GCS

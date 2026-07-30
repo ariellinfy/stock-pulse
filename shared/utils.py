@@ -1,4 +1,3 @@
-import os
 import json
 from google.cloud import storage
 from datetime import date
@@ -6,18 +5,9 @@ from typing import Tuple
 
 from dotenv import load_dotenv
 
+from shared.env import get_required_env, resolve_gcp_credentials
+
 load_dotenv()  # 讀取專案根目錄的 .env 檔案
-
-
-def get_required_env(key: str) -> str:
-    """
-    讀取必要的環境變數,若不存在則立即中斷並給出清楚的錯誤訊息。
-    回傳型態明確是 str(不是 str | None),讓呼叫端不需要再處理 None 的情況。
-    """
-    value = os.environ.get(key)
-    if value is None:
-        raise RuntimeError(f"環境變數 {key} 未設定,請確認 .env 檔案存在且內容正確")
-    return value
 
 
 def __getattr__(name: str):
@@ -39,15 +29,8 @@ def __getattr__(name: str):
 
 
 def get_gcs_client(key_path: str | None = None) -> storage.Client:
-    """
-    回傳一個已認證的 GCS client。
-    key_path 優先順序: 明確傳入的參數 > 環境變數 GCP_SA_KEY_PATH > 預設相對路徑
-    (相對路徑僅為向下相容本機開發習慣,不建議在容器/正式環境依賴它)
-    """
-    resolved_path = key_path or os.environ.get(
-        "GCP_SA_KEY_PATH", "secrets/gcp-sa-key.json"
-    )
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = resolved_path
+    """回傳一個已認證的 GCS client。"""
+    resolve_gcp_credentials(key_path)
     return storage.Client()
 
 

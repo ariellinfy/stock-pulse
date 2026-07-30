@@ -6,7 +6,6 @@ dag_market_sentiment_macro:每日例行排程
 """
 
 import os
-import sys
 from datetime import datetime, timedelta
 
 from docker.types import Mount
@@ -23,11 +22,10 @@ from airflow.providers.google.cloud.operators.bigquery import (
 from shared.alerting import log_success, send_slack_alert
 from shared.utils import BUCKET_NAME, RAW_FEAR_GREED, CLEAN_FEAR_GREED_DAILY, gcs_uri
 
-sys.path.insert(0, "/opt/airflow/project")
-
 
 def run_fear_greed_scraper(**context):
     from scrapers.fear_greed_client import fetch_fear_greed
+    from scrapers.common import FetchStatus
     from shared.utils import get_gcs_client, write_raw_json
     import json
 
@@ -36,11 +34,11 @@ def run_fear_greed_scraper(**context):
     print(f"處理日期: {target_date}")
 
     result = fetch_fear_greed(target_date)
-    if result is None:
+    if result.status != FetchStatus.SUCCESS:
         raise ValueError(f"{target_date} Fear & Greed 抓取失敗或無資料")
 
     client = get_gcs_client()
-    content = json.dumps(result, ensure_ascii=False)
+    content = json.dumps(result.data, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, RAW_FEAR_GREED, target_date, content)
     print(f"✅ Fear & Greed 成功寫入")
 

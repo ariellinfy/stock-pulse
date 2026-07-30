@@ -2,6 +2,7 @@ import json
 from datetime import date
 from unittest.mock import patch, MagicMock, mock_open
 
+from scrapers.common import FetchStatus, FetchResult
 from scripts.backfill.backfill_yahoo_tpex import (
     load_tpex_stock_list,
     backfill_yahoo_tpex,
@@ -59,7 +60,11 @@ def test_backfill_yahoo_tpex_skips_existing_and_writes_only_successful_fetches()
         return stock_id == "1111"  # 只有 1111 視為已存在
 
     def fake_fetch(stock_id, market, start, end):
-        return None if stock_id == "2222" else [{"trade_date": "2026-07-01"}]
+        if stock_id == "2222":
+            return FetchResult(status=FetchStatus.NO_DATA)
+        return FetchResult(
+            status=FetchStatus.SUCCESS, data=[{"trade_date": "2026-07-01"}]
+        )
 
     with patch(
         "scripts.backfill.backfill_yahoo_tpex.get_gcs_client", return_value=MagicMock()

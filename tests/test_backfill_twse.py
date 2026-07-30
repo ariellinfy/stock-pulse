@@ -7,7 +7,7 @@ from scripts.backfill.backfill_twse import (
     is_marked_no_trading_day,
     backfill_twse,
 )
-from scrapers.twse_client import FetchStatus, FetchResult
+from scrapers.common import FetchStatus, FetchResult
 
 
 def test_generate_date_range_is_inclusive_of_start_and_end():
@@ -71,7 +71,7 @@ def test_backfill_twse_handles_all_branches_across_date_range():
 
     def fake_fetch(target_date):
         if target_date == d_new_holiday:
-            return FetchResult(status=FetchStatus.NO_TRADING_DAY)
+            return FetchResult(status=FetchStatus.NO_DATA)
         if target_date == d_unknown_failure:
             return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
         return FetchResult(status=FetchStatus.SUCCESS, data={"fields": [], "data": []})

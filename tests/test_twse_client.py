@@ -4,8 +4,8 @@ from unittest.mock import patch, Mock
 from scrapers.twse_client import (
     fetch_daily_quotes_for_daily_schedule,
     fetch_daily_quotes_for_backfill,
-    FetchStatus,
 )
+from scrapers.common import FetchStatus
 
 
 def _no_data_response():
@@ -49,7 +49,7 @@ def test_backfill_still_confirms_no_trading_day_for_past_dates():
             date(2024, 7, 6), no_data_confirm_attempts=2
         )
 
-    assert result.status == FetchStatus.NO_TRADING_DAY
+    assert result.status == FetchStatus.NO_DATA
     assert mock_get.call_count == 2
 
 

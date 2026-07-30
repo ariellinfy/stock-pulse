@@ -1,6 +1,9 @@
 from datetime import date
 from unittest.mock import patch, Mock
 
+import requests
+
+from scrapers.common import FetchStatus
 from scrapers.tpex_client import (
     fetch_daily_quotes,
     to_roc_date,
@@ -28,23 +31,21 @@ def test_fetch_daily_quotes_success_returns_expected_shape():
     ):
         result = fetch_daily_quotes(date(2026, 7, 9))
 
-    assert result is not None
-    assert result["fields_match_expected"] is True
-    assert result["data"] == [["1101", "台泥"]]
-    assert result["actual_trade_date"] == "2026-07-09"
+    assert result.status == FetchStatus.SUCCESS
+    assert result.data["fields_match_expected"] is True
+    assert result.data["data"] == [["1101", "台泥"]]
+    assert result.data["actual_trade_date"] == "2026-07-09"
 
 
-def test_fetch_daily_quotes_no_tables_returns_none():
-    """
-    TPEx 官方端點在非交易日時 tables 是空陣列——這是唯一「無資料」的訊號,
-    跟 TWSE 的多重狀態設計不同,呼叫端只能用 is None 判斷。
-    """
+def test_fetch_daily_quotes_no_tables_returns_no_data():
+    """TPEx 官方端點在非交易日時 tables 是空陣列——這是唯一的「無資料」訊號。"""
     with patch(
         "scrapers.tpex_client.requests.get", return_value=_response_with_tables([])
     ):
         result = fetch_daily_quotes(date(2026, 7, 9))
 
-    assert result is None
+    assert result.status == FetchStatus.NO_DATA
+    assert result.data is None
 
 
 def test_fetch_daily_quotes_field_mismatch_still_returns_data():
@@ -54,13 +55,25 @@ def test_fetch_daily_quotes_field_mismatch_still_returns_data():
     ):
         result = fetch_daily_quotes(date(2026, 7, 9))
 
-    assert result is not None
-    assert result["fields_match_expected"] is False
+    assert result.status == FetchStatus.SUCCESS
+    assert result.data["fields_match_expected"] is False
+
+
+def test_fetch_daily_quotes_request_exception_returns_unknown_failure():
+    with patch(
+        "scrapers.tpex_client.requests.get",
+        side_effect=requests.exceptions.ConnectionError("boom"),
+    ):
+        result = fetch_daily_quotes(date(2026, 7, 9))
+
+    assert result.status == FetchStatus.UNKNOWN_FAILURE
+    assert result.data is None
 
 
 if __name__ == "__main__":
     test_to_roc_date_and_back_are_inverse()
     test_fetch_daily_quotes_success_returns_expected_shape()
-    test_fetch_daily_quotes_no_tables_returns_none()
+    test_fetch_daily_quotes_no_tables_returns_no_data()
     test_fetch_daily_quotes_field_mismatch_still_returns_data()
+    test_fetch_daily_quotes_request_exception_returns_unknown_failure()
     print("✅ 全部測試通過")
