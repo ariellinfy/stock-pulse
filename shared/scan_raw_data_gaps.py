@@ -154,25 +154,6 @@ def check_single_day_tpex_completeness(
     return True
 
 
-def verify_days_fixed(
-    bucket_name: str, dates_to_check: list[str], min_expected_rows: int = 1300
-):
-    """確認指定日期重新回補後,筆數是否恢復到合理範圍。"""
-    client = get_gcs_client()
-    bucket = client.bucket(bucket_name)
-
-    for dt_str in dates_to_check:
-        blob = bucket.blob(f"raw/twse_daily/dt={dt_str}/data.json")
-        if not blob.exists():
-            print(f"❌ {dt_str}: 檔案不存在")
-            continue
-
-        content = json.loads(blob.download_as_text())
-        row_count = len(content.get("data", []))
-        status = "✅ 正常" if row_count > min_expected_rows else "⚠️ 仍偏低"
-        print(f"{dt_str}: {row_count} 筆 {status}")
-
-
 if __name__ == "__main__":
     with open("local_output/industry_list_twse.json", "r", encoding="utf-8") as f:
         twse_industry_records = json.load(f)
