@@ -15,13 +15,14 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import (
     BUCKET_NAME,
+    RAW_FEAR_GREED_HISTORY,
     get_gcs_client,
     write_raw_partitioned,
     raw_blob_exists_partitioned,
 )
 from scrapers.fear_greed_client import fetch_fear_greed_full_history
 
-SOURCE_NAME = "fear_greed_history"
+SOURCE_NAME = RAW_FEAR_GREED_HISTORY
 PARTITION_VALUE = "full"  # 固定值,因為這份資料本質上不分區,整段歷史就是一筆
 
 

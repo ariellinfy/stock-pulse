@@ -22,6 +22,14 @@ from airflow.providers.google.cloud.operators.bigquery import (
 )
 
 from shared.alerting import log_success, send_slack_alert
+from shared.utils import (
+    BUCKET_NAME,
+    RAW_TWSE_DAILY,
+    RAW_TPEX_DAILY,
+    CLEAN_STOCK_DAILY,
+    raw_industry_list_source_name,
+    gcs_uri,
+)
 
 sys.path.insert(0, "/opt/airflow/project")
 
@@ -40,7 +48,7 @@ def run_twse_scraper(**context):
         fetch_daily_quotes_for_daily_schedule,
         FetchStatus,
     )
-    from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+    from shared.utils import get_gcs_client, write_raw_json
     import json
 
     target_date = context["data_interval_end"].in_timezone("Asia/Taipei").date()
@@ -65,7 +73,7 @@ def run_twse_scraper(**context):
 
     client = get_gcs_client()
     content = json.dumps(result.data, ensure_ascii=False)
-    write_raw_json(client, BUCKET_NAME, "twse_daily", target_date, content)
+    write_raw_json(client, BUCKET_NAME, RAW_TWSE_DAILY, target_date, content)
     print(f"✅ TWSE 成功寫入 {len(result.data['data'])} 筆資料")
 
     if not result.data.get("fields_match_expected", True):
@@ -81,7 +89,7 @@ def run_twse_scraper(**context):
 
 def run_tpex_scraper(**context):
     from scrapers.tpex_client import fetch_daily_quotes
-    from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+    from shared.utils import get_gcs_client, write_raw_json
     import json
 
     target_date = context["data_interval_end"].in_timezone("Asia/Taipei").date()
@@ -104,7 +112,7 @@ def run_tpex_scraper(**context):
 
     client = get_gcs_client()
     content = json.dumps(result, ensure_ascii=False)
-    write_raw_json(client, BUCKET_NAME, "tpex_daily", target_date, content)
+    write_raw_json(client, BUCKET_NAME, RAW_TPEX_DAILY, target_date, content)
     print(
         f"✅ TPEx 成功寫入 {len(result['data'])} 筆資料,實際日期: {result.get('actual_trade_date')}"
     )
@@ -112,7 +120,7 @@ def run_tpex_scraper(**context):
 
 def run_industry_scraper(**context):
     from scrapers.industry_client import fetch_industry_list
-    from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+    from shared.utils import get_gcs_client, write_raw_json
     from datetime import date
     import json
 
@@ -126,13 +134,13 @@ def run_industry_scraper(**context):
 
         content = json.dumps(records, ensure_ascii=False)
         write_raw_json(
-            client, BUCKET_NAME, f"industry_list_{market.lower()}", today, content
+            client, BUCKET_NAME, raw_industry_list_source_name(market), today, content
         )
         print(f"✅ {market} 產業分類清單成功寫入 {len(records)} 筆")
 
 
 def run_completeness_check(**context):
-    from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
+    from shared.utils import load_industry_list_from_gcs
     from shared.completeness_check import (
         check_single_day_twse_completeness,
         check_single_day_tpex_completeness,
@@ -197,7 +205,7 @@ with DAG(
         ],
         environment={
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
-            "GCP_BUCKET_NAME": "stock-pulse-data-lake",
+            "GCP_BUCKET_NAME": BUCKET_NAME,
         },
     )
 
@@ -234,7 +242,7 @@ with DAG(
         ],
         environment={
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
-            "GCP_BUCKET_NAME": "stock-pulse-data-lake",
+            "GCP_BUCKET_NAME": BUCKET_NAME,
         },
     )
 
@@ -253,9 +261,10 @@ with DAG(
     load_stock_to_bq = GCSToBigQueryOperator(
         task_id="load_stock_daily_to_bq",
         gcp_conn_id="google_cloud_default",
-        bucket="stock-pulse-data-lake",
+        bucket=BUCKET_NAME,
         source_objects=[
-            "clean/stock_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"
+            f"{CLEAN_STOCK_DAILY}/dt="
+            + "{{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"
         ],
         destination_project_dataset_table=f"{project_id}.stockpulse_staging.raw_stock_daily",
         source_format="PARQUET",
@@ -263,7 +272,7 @@ with DAG(
         extra_config={
             "hivePartitioningOptions": {
                 "mode": "AUTO",
-                "sourceUriPrefix": "gs://stock-pulse-data-lake/clean/stock_daily/",
+                "sourceUriPrefix": gcs_uri(BUCKET_NAME, CLEAN_STOCK_DAILY) + "/",
             }
         },
     )

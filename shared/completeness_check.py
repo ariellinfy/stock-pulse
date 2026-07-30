@@ -8,7 +8,7 @@ scripts/adhoc/scan_raw_data_gaps.py(手動觸發的分析工具,不在排程裡)
 
 import json
 
-from shared.utils import get_gcs_client
+from shared.utils import get_gcs_client, raw_blob_path, RAW_TWSE_DAILY, RAW_TPEX_DAILY
 
 
 def check_single_day_twse_completeness(
@@ -23,7 +23,7 @@ def check_single_day_twse_completeness(
     """
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)
-    blob = bucket.blob(f"raw/twse_daily/dt={target_date}/data.json")
+    blob = bucket.blob(raw_blob_path(RAW_TWSE_DAILY, "dt", target_date))
 
     if not blob.exists():
         # 沒有檔案,可能是非交易日(已由 check_trading_day 短路處理),不算異常
@@ -69,7 +69,7 @@ def check_single_day_tpex_completeness(
     """
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)
-    blob = bucket.blob(f"raw/tpex_daily/dt={target_date}/data.json")
+    blob = bucket.blob(raw_blob_path(RAW_TPEX_DAILY, "dt", target_date))
 
     if not blob.exists():
         print(f"ℹ️ {target_date} 無 TPEx raw data(可能為非交易日)")

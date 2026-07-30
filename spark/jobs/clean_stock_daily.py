@@ -9,7 +9,15 @@ from pathlib import Path
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
+from shared.utils import (
+    BUCKET_NAME,
+    RAW_TWSE_DAILY,
+    RAW_TPEX_DAILY,
+    CLEAN_STOCK_DAILY,
+    load_industry_list_from_gcs,
+    raw_blob_path,
+    gcs_uri,
+)
 from spark.common.schemas import TWSE_RAW_SCHEMA, TPEX_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
 from spark.jobs.clean_stock import (
@@ -32,8 +40,8 @@ def clean_single_day(
     清洗指定單一日期的 TWSE + TPEx 每日行情,動態分區覆寫寫出。
     只會動到 dt=target_date 這一個分區,不影響其他歷史資料。
     """
-    twse_path = f"gs://{bucket_name}/raw/twse_daily/dt={target_date}/data.json"
-    tpex_path = f"gs://{bucket_name}/raw/tpex_daily/dt={target_date}/data.json"
+    twse_path = gcs_uri(bucket_name, raw_blob_path(RAW_TWSE_DAILY, "dt", target_date))
+    tpex_path = gcs_uri(bucket_name, raw_blob_path(RAW_TPEX_DAILY, "dt", target_date))
 
     # 單日原始檔案結構是 {"fields":[...], "data":[[...]]},用我們熟悉的單日讀取方式,
     # 不需要像 backfill 版本那樣 explode 多天份的巢狀結構
@@ -67,7 +75,7 @@ def clean_single_day(
 
     print(f"{target_date} 清洗後總筆數: {combined.count()}")
 
-    output_path = f"gs://{bucket_name}/clean/stock_daily/"
+    output_path = gcs_uri(bucket_name, CLEAN_STOCK_DAILY) + "/"
     combined.write.mode("overwrite").partitionBy("dt").parquet(output_path)
 
     print(f"✅ {target_date} 清洗完成並寫出")

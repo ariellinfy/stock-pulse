@@ -12,7 +12,7 @@ from pathlib import Path
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import load_industry_list_from_gcs
+from shared.utils import load_industry_list_from_gcs, CLEAN_INDUSTRY_LIST, gcs_uri
 
 
 def clean_industry_list(df, market: str):
@@ -51,7 +51,7 @@ def clean_and_write_industry_list(spark, bucket_name: str):
 
     print(f"產業分類清單清洗後總筆數: {combined.count()}")
 
-    output_path = f"gs://{bucket_name}/clean/industry_list/"
+    output_path = gcs_uri(bucket_name, CLEAN_INDUSTRY_LIST) + "/"
     combined.write.mode("overwrite").parquet(output_path)
 
     print(f"✅ 產業分類清單已寫出至 {output_path}")

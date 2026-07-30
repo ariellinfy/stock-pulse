@@ -20,8 +20,22 @@ def get_required_env(key: str) -> str:
     return value
 
 
-BUCKET_NAME: str = get_required_env("GCP_BUCKET_NAME")
-SA_KEY_PATH: str = get_required_env("GCP_SA_KEY_PATH")
+def __getattr__(name: str):
+    """
+    延遲評估 BUCKET_NAME / SA_KEY_PATH:只有真的有人存取這兩個名稱時,才去檢查
+    對應的環境變數是否存在(PEP 562 模組層級 __getattr__)。
+
+    這裡刻意不在模組頂層直接賦值,是因為那樣會讓「只是想 import 這個模組裡
+    完全不需要 GCP 環境的純函式」(例如 normalize_stock_id)時,也被迫要求整組
+    GCP 環境變數就緒——這對輕量測試(見 tests/test_normalize_stock_id.py)是
+    不必要的耦合。實際會用到 BUCKET_NAME/SA_KEY_PATH 的呼叫端行為不變:
+    import 當下一樣會立刻觸發檢查。
+    """
+    if name == "BUCKET_NAME":
+        return get_required_env("GCP_BUCKET_NAME")
+    if name == "SA_KEY_PATH":
+        return get_required_env("GCP_SA_KEY_PATH")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_gcs_client(key_path: str | None = None) -> storage.Client:
@@ -37,6 +51,41 @@ def get_gcs_client(key_path: str | None = None) -> storage.Client:
     return storage.Client()
 
 
+# --- Raw / Clean 資料湖路徑慣例的唯一定義來源 ---
+# raw 層 source_name:寫入端(scrapers 觸發的 Airflow task、backfill 腳本)跟讀取端
+# (spark jobs、completeness check、手動分析腳本)過去分別重複寫死同一個字串,
+# 這裡統一定義,兩邊都改成 import 這裡的常數,避免其中一邊改了忘記同步另一邊。
+RAW_TWSE_DAILY = "twse_daily"
+RAW_TPEX_DAILY = "tpex_daily"
+RAW_FEAR_GREED = "fear_greed"
+RAW_FEAR_GREED_HISTORY = "fear_greed_history"
+RAW_YAHOO_TPEX_HISTORY = "yahoo_tpex_history"
+
+# clean 層路徑前綴(不含 bucket/scheme,呼叫端視需要自行組 gs://{bucket}/ 開頭)
+CLEAN_STOCK_DAILY = "clean/stock_daily"
+CLEAN_FEAR_GREED_DAILY = "clean/fear_greed_daily"
+CLEAN_INDUSTRY_LIST = "clean/industry_list"
+
+
+def raw_industry_list_source_name(market: str) -> str:
+    """對應 industry_client 抓回來、寫入 raw 層時用的 source_name。"""
+    return f"industry_list_{market.lower()}"
+
+
+def gcs_uri(bucket_name: str, path: str) -> str:
+    """組出 gs://{bucket}/{path} 形式的完整 URI,供 Spark 讀寫使用。"""
+    return f"gs://{bucket_name}/{path}"
+
+
+def raw_blob_path(source_name: str, partition_key: str, partition_value: str) -> str:
+    """
+    raw 層單一分區的路徑樣板: raw/{source_name}/{partition_key}={partition_value}/data.json
+    寫入(write_raw_partitioned)、讀取(spark jobs、completeness check 等)都呼叫
+    這裡,避免雙方各自重複寫死同一個字串樣板。
+    """
+    return f"raw/{source_name}/{partition_key}={partition_value}/data.json"
+
+
 def write_raw_partitioned(
     client: storage.Client,
     bucket_name: str,
@@ -48,18 +97,16 @@ def write_raw_partitioned(
     """
     通用的冪等寫入函式,分區方式由呼叫端決定(不限於日期)。
 
-    路徑格式: raw/{source_name}/{partition_key}={partition_value}/data.json
-
     例如:
         partition_key="dt", partition_value="2026-07-08"       → 按日期分區(TWSE/TPEx)
         partition_key="stock_id", partition_value="1240"        → 按股票代號分區(Yahoo 歷史回補)
     """
-    blob_path = f"raw/{source_name}/{partition_key}={partition_value}/data.json"
+    blob_path = raw_blob_path(source_name, partition_key, partition_value)
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
     blob.upload_from_string(content, content_type="application/json")
 
-    full_path = f"gs://{bucket_name}/{blob_path}"
+    full_path = gcs_uri(bucket_name, blob_path)
     print(f"✅ 已寫入(冪等覆蓋): {full_path}")
     return full_path
 
@@ -86,7 +133,7 @@ def raw_blob_exists_partitioned(
     partition_value: str,
 ) -> bool:
     """通用版本的斷點續跑檢查,對應 write_raw_partitioned。"""
-    blob_path = f"raw/{source_name}/{partition_key}={partition_value}/data.json"
+    blob_path = raw_blob_path(source_name, partition_key, partition_value)
     blob = client.bucket(bucket_name).blob(blob_path)
     return blob.exists()
 
@@ -137,7 +184,7 @@ def load_industry_list_from_gcs(bucket_name: str, market: str) -> list[dict]:
     """
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)
-    prefix = f"raw/industry_list_{market.lower()}/"
+    prefix = f"raw/{raw_industry_list_source_name(market)}/"
     blobs = list(bucket.list_blobs(prefix=prefix))
 
     if not blobs:

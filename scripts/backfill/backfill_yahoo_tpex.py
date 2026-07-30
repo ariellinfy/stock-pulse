@@ -20,13 +20,15 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import (
     BUCKET_NAME,
+    RAW_YAHOO_TPEX_HISTORY,
     get_gcs_client,
     write_raw_partitioned,
     raw_blob_exists_partitioned,
+    raw_industry_list_source_name,
 )
 from scrapers.yahoo_client import fetch_yahoo_history
 
-SOURCE_NAME = "yahoo_tpex_history"
+SOURCE_NAME = RAW_YAHOO_TPEX_HISTORY
 
 
 def load_tpex_stock_list(client, bucket_name: str) -> list[str]:
@@ -38,14 +40,15 @@ def load_tpex_stock_list(client, bucket_name: str) -> list[str]:
     # 直接讀最近一次存的那份(還記得我們之前討論過,這份清單本質是「快照」,
     # 下游只在乎最新一份)
     bucket = client.bucket(bucket_name)
-    blobs = list(bucket.list_blobs(prefix="raw/industry_list_tpex/"))
+    industry_list_source_name = raw_industry_list_source_name("TPEx")
+    blobs = list(bucket.list_blobs(prefix=f"raw/{industry_list_source_name}/"))
 
     if not blobs:
         raise RuntimeError(
-            "找不到 industry_list_tpex 的任何資料,請先執行 industry_client.py"
+            f"找不到 {industry_list_source_name} 的任何資料,請先執行 industry_client.py"
         )
 
-    # 取最新的一個分區(路徑格式: raw/industry_list_tpex/dt=YYYY-MM-DD/data.json)
+    # 取最新的一個分區(路徑格式: raw/{industry_list_source_name}/dt=YYYY-MM-DD/data.json)
     latest_blob = sorted(blobs, key=lambda b: b.name)[-1]
     print(f"讀取產業分類清單: {latest_blob.name}")
 

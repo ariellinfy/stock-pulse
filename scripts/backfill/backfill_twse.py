@@ -13,10 +13,16 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_json, raw_blob_exists
+from shared.utils import (
+    BUCKET_NAME,
+    RAW_TWSE_DAILY,
+    get_gcs_client,
+    write_raw_json,
+    raw_blob_exists,
+)
 from scrapers.twse_client import FetchStatus, fetch_daily_quotes_for_backfill
 
-SOURCE_NAME = "twse_daily"
+SOURCE_NAME = RAW_TWSE_DAILY
 
 
 def generate_date_range(start: date, end: date) -> list[date]:

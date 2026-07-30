@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import get_gcs_client, BUCKET_NAME
+from shared.utils import (
+    get_gcs_client,
+    raw_blob_path,
+    BUCKET_NAME,
+    RAW_YAHOO_TPEX_HISTORY,
+)
 
 
 def download_blob(bucket_name: str, blob_path: str, local_path: str):
@@ -26,6 +31,6 @@ if __name__ == "__main__":
     samples = ["7794"]
 
     for stock_id in samples:
-        blob_path = f"raw/yahoo_tpex_history/stock_id={stock_id}/data.json"
+        blob_path = raw_blob_path(RAW_YAHOO_TPEX_HISTORY, "stock_id", stock_id)
         local_path = f"local_output/yahoo_sample/stock_id_{stock_id}.json"
         download_blob(BUCKET_NAME, blob_path, local_path)

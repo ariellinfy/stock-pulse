@@ -21,13 +21,14 @@ from airflow.providers.google.cloud.operators.bigquery import (
 )
 
 from shared.alerting import log_success, send_slack_alert
+from shared.utils import BUCKET_NAME, RAW_FEAR_GREED, CLEAN_FEAR_GREED_DAILY, gcs_uri
 
 sys.path.insert(0, "/opt/airflow/project")
 
 
 def run_fear_greed_scraper(**context):
     from scrapers.fear_greed_client import fetch_fear_greed
-    from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
+    from shared.utils import get_gcs_client, write_raw_json
     import json
 
     # target_date = context["data_interval_end"].date()
@@ -40,7 +41,7 @@ def run_fear_greed_scraper(**context):
 
     client = get_gcs_client()
     content = json.dumps(result, ensure_ascii=False)
-    write_raw_json(client, BUCKET_NAME, "fear_greed", target_date, content)
+    write_raw_json(client, BUCKET_NAME, RAW_FEAR_GREED, target_date, content)
     print(f"✅ Fear & Greed 成功寫入")
 
 
@@ -85,7 +86,7 @@ with DAG(
         ],
         environment={
             "GCP_SA_KEY_PATH": "/app/secrets/gcp-sa-key.json",
-            "GCP_BUCKET_NAME": "stock-pulse-data-lake",
+            "GCP_BUCKET_NAME": BUCKET_NAME,
         },
     )
 
@@ -104,9 +105,10 @@ with DAG(
     load_fg_to_bq = GCSToBigQueryOperator(
         task_id="load_fear_greed_to_bq",
         gcp_conn_id="google_cloud_default",
-        bucket="stock-pulse-data-lake",
+        bucket=BUCKET_NAME,
         source_objects=[
-            "clean/fear_greed_daily/dt={{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"
+            f"{CLEAN_FEAR_GREED_DAILY}/dt="
+            + "{{ data_interval_end.in_timezone('Asia/Taipei').strftime('%Y-%m-%d') }}/*.parquet"
         ],
         destination_project_dataset_table=f"{project_id}.stockpulse_staging.raw_fear_greed",
         source_format="PARQUET",
@@ -114,7 +116,7 @@ with DAG(
         extra_config={
             "hivePartitioningOptions": {
                 "mode": "AUTO",
-                "sourceUriPrefix": "gs://stock-pulse-data-lake/clean/fear_greed_daily/",
+                "sourceUriPrefix": gcs_uri(BUCKET_NAME, CLEAN_FEAR_GREED_DAILY) + "/",
             }
         },
     )

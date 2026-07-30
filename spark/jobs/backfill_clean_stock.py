@@ -11,7 +11,17 @@ from pathlib import Path
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
+from shared.utils import (
+    BUCKET_NAME,
+    RAW_TWSE_DAILY,
+    RAW_YAHOO_TPEX_HISTORY,
+    RAW_FEAR_GREED_HISTORY,
+    CLEAN_STOCK_DAILY,
+    CLEAN_FEAR_GREED_DAILY,
+    load_industry_list_from_gcs,
+    raw_blob_path,
+    gcs_uri,
+)
 from spark.common.schemas import TWSE_RAW_SCHEMA
 from spark.common.spark_session import build_spark_session
 from spark.jobs.clean_stock import (
@@ -63,7 +73,7 @@ def backfill_all_markets(spark, bucket_name: str, twse_official_ids: list[str]):
     twse_raw = (
         spark.read.option("multiline", "true")
         .option("pathGlobFilter", "data.json")
-        .json(f"gs://{bucket_name}/raw/twse_daily/")
+        .json(gcs_uri(bucket_name, f"raw/{RAW_TWSE_DAILY}/"))
     )
     twse_exploded = explode_daily_data(twse_raw)
     twse_flattened = flatten_to_columns(twse_exploded)
@@ -74,7 +84,7 @@ def backfill_all_markets(spark, bucket_name: str, twse_official_ids: list[str]):
 
     # Yahoo TPEx 歷史(TPEx 唯一的歷史資料來源,官方每日端點無法查歷史)
     yahoo_raw = spark.read.option("multiline", "true").json(
-        f"gs://{bucket_name}/raw/yahoo_tpex_history/"
+        gcs_uri(bucket_name, f"raw/{RAW_YAHOO_TPEX_HISTORY}/")
     )
     yahoo_cleaned = clean_yahoo_history(yahoo_raw)
     yahoo_unified = unify_yahoo_tpex(yahoo_cleaned)
@@ -85,7 +95,7 @@ def backfill_all_markets(spark, bucket_name: str, twse_official_ids: list[str]):
     print(f"合併後總筆數: {combined.count()}")
     combined.groupBy("market").count().show()
 
-    output_path = f"gs://{bucket_name}/clean/stock_daily/"
+    output_path = gcs_uri(bucket_name, CLEAN_STOCK_DAILY) + "/"
 
     (
         combined.repartition(F.col("dt"))
@@ -98,7 +108,9 @@ def backfill_all_markets(spark, bucket_name: str, twse_official_ids: list[str]):
 
 
 def backfill_fear_greed(spark, bucket_name: str):
-    raw_path = f"gs://{bucket_name}/raw/fear_greed_history/range=full/data.json"
+    raw_path = gcs_uri(
+        bucket_name, raw_blob_path(RAW_FEAR_GREED_HISTORY, "range", "full")
+    )
     fg_raw = spark.read.option("multiline", "true").json(raw_path)
 
     fg_data = fg_raw.select(
@@ -110,7 +122,7 @@ def backfill_fear_greed(spark, bucket_name: str):
 
     print(f"Fear & Greed 清洗後總筆數: {cleaned.count()}")
 
-    output_path = f"gs://{bucket_name}/clean/fear_greed_daily/"
+    output_path = gcs_uri(bucket_name, CLEAN_FEAR_GREED_DAILY) + "/"
     (cleaned.write.mode("overwrite").partitionBy("dt").parquet(output_path))
 
     print(f"✅ Fear & Greed 已寫出至 {output_path}")

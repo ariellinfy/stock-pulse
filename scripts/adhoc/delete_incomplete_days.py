@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import get_gcs_client, BUCKET_NAME
+from shared.utils import get_gcs_client, raw_blob_path, BUCKET_NAME, RAW_TWSE_DAILY
 
 
 def delete_and_requeue(bucket_name: str, dates_to_fix: list[str]):
@@ -13,7 +13,7 @@ def delete_and_requeue(bucket_name: str, dates_to_fix: list[str]):
     bucket = client.bucket(bucket_name)
 
     for dt_str in dates_to_fix:
-        blob_path = f"raw/twse_daily/dt={dt_str}/data.json"
+        blob_path = raw_blob_path(RAW_TWSE_DAILY, "dt", dt_str)
         blob = bucket.blob(blob_path)
         if blob.exists():
             blob.delete()

@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import get_gcs_client, BUCKET_NAME
+from shared.utils import get_gcs_client, BUCKET_NAME, RAW_TWSE_DAILY
 
 
 def scan_raw_data_gaps(
@@ -36,7 +36,7 @@ def scan_raw_data_gaps(
 
     client = get_gcs_client()
     bucket = client.bucket(bucket_name)
-    blobs = list(bucket.list_blobs(prefix="raw/twse_daily/"))
+    blobs = list(bucket.list_blobs(prefix=f"raw/{RAW_TWSE_DAILY}/"))
 
     suspicious_days = []
 

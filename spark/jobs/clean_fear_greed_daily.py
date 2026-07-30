@@ -10,12 +10,18 @@ from pathlib import Path
 from pyspark.sql import functions as F
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from shared.utils import BUCKET_NAME
+from shared.utils import (
+    BUCKET_NAME,
+    RAW_FEAR_GREED,
+    CLEAN_FEAR_GREED_DAILY,
+    raw_blob_path,
+    gcs_uri,
+)
 from spark.common.spark_session import build_spark_session
 
 
 def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
-    raw_path = f"gs://{bucket_name}/raw/fear_greed/dt={target_date}/data.json"
+    raw_path = gcs_uri(bucket_name, raw_blob_path(RAW_FEAR_GREED, "dt", target_date))
     raw_df = spark.read.option("multiline", "true").json(raw_path)
 
     # 展開 historical.data 陣列,找出精確對應 target_date 這一天的記錄
@@ -57,7 +63,7 @@ def clean_single_day_fear_greed(spark, bucket_name: str, target_date: str):
     print(f"{target_date} Fear & Greed 清洗後總筆數: {cleaned.count()}")
     cleaned.show(truncate=False)
 
-    output_path = f"gs://{bucket_name}/clean/fear_greed_daily/"
+    output_path = gcs_uri(bucket_name, CLEAN_FEAR_GREED_DAILY) + "/"
     cleaned.write.mode("overwrite").partitionBy("dt").parquet(output_path)
 
     print(f"✅ {target_date} Fear & Greed 清洗完成並寫出")
