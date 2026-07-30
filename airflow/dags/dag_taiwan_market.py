@@ -37,42 +37,46 @@ def check_trading_day(**context):
 
 def run_twse_scraper(**context):
     from scrapers.twse_client import (
-        fetch_daily_quotes,
+        fetch_daily_quotes_for_daily_schedule,
         FetchStatus,
-    )  # 需要新增一個不寫永久標記的版本
+    )
     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
     import json
 
     target_date = context["data_interval_end"].in_timezone("Asia/Taipei").date()
     print(f"處理日期: {target_date}")
 
-    result = fetch_daily_quotes(target_date)
-
-    if result.status == FetchStatus.NO_TRADING_DAY:
-        print(f"ℹ️ {target_date} 確認為非交易日,無需處理")
-        return
+    result = fetch_daily_quotes_for_daily_schedule(target_date)
 
     if result.status == FetchStatus.UNKNOWN_FAILURE:
+        # 涵蓋兩種目前無法區分的情況:(1) 今天資料還沒統計完成 (2) 今天是未被
+        # check_trading_day 攔截到的國定假日(該函式目前只檢查週末)。
+        # TWSE 對這兩種情況回應完全相同,無法從內容判斷,因此一律視為「未知,稍後由
+        # Airflow retry」,不嘗試靜默猜測為假日——避免真正的交易日資料被悄悄跳過。
+        # 若確實是國定假日,retry 耗盡後此 task 會失敗並觸發告警,屬已知、可接受
+        # 的誤報(尚未串接國定假日日曆)。
         raise ValueError(
-            f"{target_date} TWSE 無法取得資料(可能是非交易日,或當日資料尚未彙整完成)。"
-            f"若確認是交易日,請檢查排程時間是否過早,或手動重跑此任務。"
+            f"{target_date} TWSE 無法取得資料(可能是資料尚未彙整完成,或今天是"
+            f"未被 check_trading_day 攔截的國定假日)。若確認是一般交易日,"
+            f"請檢查排程時間是否過早,或手動重跑此任務。"
         )
 
     assert result.data is not None  # status == SUCCESS,data 保證有值
-
-    if not result.data.get("fields_match_expected", True):
-        # 不直接 raise 讓任務失敗(資料本身還是有效、可以繼續處理),
-        # 但這是需要人工關注的訊號,單獨觸發告警
-        raise ValueError(
-            f"⚠️ {target_date} TWSE 欄位結構與預期不符!"
-            f"實際欄位: {result.data.get('fields')}。"
-            f"這代表 TWSE API 可能已調整格式,需要人工檢查並更新 schema 定義。"
-        )
 
     client = get_gcs_client()
     content = json.dumps(result.data, ensure_ascii=False)
     write_raw_json(client, BUCKET_NAME, "twse_daily", target_date, content)
     print(f"✅ TWSE 成功寫入 {len(result.data['data'])} 筆資料")
+
+    if not result.data.get("fields_match_expected", True):
+        # 資料已寫入 GCS(格式仍可用,不會遺失),但欄位跟預期不同,需要人工檢查
+        # 並更新 schema 定義,因此仍讓這個 task 失敗以觸發告警
+        raise ValueError(
+            f"⚠️ {target_date} TWSE 欄位結構與預期不符!"
+            f"實際欄位: {result.data.get('fields')}。"
+            f"這代表 TWSE API 可能已調整格式,需要人工檢查並更新 schema 定義"
+            f"(資料已寫入 GCS,不會遺失)。"
+        )
 
 
 def run_tpex_scraper(**context):

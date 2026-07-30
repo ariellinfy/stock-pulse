@@ -80,20 +80,33 @@ def validate_fields(actual_fields: list[str]) -> bool:
     return True
 
 
-def fetch_daily_quotes(
-    target_date: date, max_retries: int = 3, no_data_confirm_attempts: int = 2
+def _fetch_daily_quotes(
+    target_date: date,
+    max_retries: int,
+    confirm_no_trading_day: bool,
+    no_data_confirm_attempts: int = 2,
 ) -> FetchResult:
     """
-    抓取指定日期的全市場個股收盤行情原始資料(未清洗)。
+    抓取指定日期的全市場個股收盤行情原始資料(未清洗)——請求/驗證邏輯的共用實作,
+    供 fetch_daily_quotes_for_backfill 與 fetch_daily_quotes_for_daily_schedule 呼叫,
+    不要直接呼叫這支函式。
 
-    回傳: 每一列是一支股票的原始資料(list of str),對應 fields 定義的 16 個欄位。
-          非交易日或抓取失敗時回傳 None(不拋例外,讓呼叫端決定如何處理)。
+    confirm_no_trading_day 是兩個呼叫端唯一的行為差異:
+      - True (僅限已確定過去的歷史日期):連續 no_data_confirm_attempts 次收到
+        無資料回應後,才判定為 NO_TRADING_DAY。
+      - False (每日例行排程專用):完全不做這個判斷,查無資料立刻回傳
+        UNKNOWN_FAILURE,交由呼叫端視為「未知,稍後重試」。
+
+    這個差異存在的原因:TWSE 對「非交易日」與「資料尚未彙整完成」回傳的訊息
+    完全相同,無法從內容分辨——對已經過去很久的歷史日期來說沒有歧義(資料若
+    存在早該彙整完成),但對今天/近期的日期而言,不管確認幾次、間隔多久,
+    都不可能分辨出這兩種情況,因此每日排程不能使用「確認後判定」的邏輯。
 
     回傳 FetchResult - status 有三種可能:
           - SUCCESS: 成功取得資料,data 欄位有值
-          - NO_TRADING_DAY: 連續 no_data_confirm_attempts 次都確認 TWSE 明確回應無資料,
-                             可放心視為非交易日
-          - UNKNOWN_FAILURE: 請求本身失敗(網路錯誤/403等),無法判斷當天狀態,需要之後重試
+          - NO_TRADING_DAY: 僅在 confirm_no_trading_day=True 時才可能出現,
+                             代表連續 no_data_confirm_attempts 次都確認無資料
+          - UNKNOWN_FAILURE: 請求本身失敗,或無法判斷當天狀態,需要之後重試
 
     回傳data格式(自帶欄位說明,不再是純陣列):
         {
@@ -121,11 +134,10 @@ def fetch_daily_quotes(
                 )
                 time.sleep(wait_time)
                 continue
-            else:
-                print(f"❌ {date_str} 請求失敗(非 403): {e}")
-                return FetchResult(
-                    status=FetchStatus.UNKNOWN_FAILURE
-                )  # 不確定狀態,不標記,交由之後重試
+            print(f"❌ {date_str} 請求失敗(非 403): {e}")
+            return FetchResult(
+                status=FetchStatus.UNKNOWN_FAILURE
+            )  # 不確定狀態,不標記,交由之後重試
         except requests.exceptions.RequestException as e:
             print(f"❌ {date_str} 網路錯誤: {e}")
             return FetchResult(
@@ -135,6 +147,15 @@ def fetch_daily_quotes(
         payload = resp.json()
 
         if payload.get("stat") != "OK":
+            if not confirm_no_trading_day:
+                print(
+                    f"ℹ️ {date_str} 目前查無資料(stat={payload.get('stat')}),"
+                    f"可能是非交易日或資料尚未彙整"
+                )
+                return FetchResult(
+                    status=FetchStatus.UNKNOWN_FAILURE
+                )  # 不永久標記,單純回傳未知狀態
+
             no_data_confirmations += 1
             print(
                 f"ℹ️ {date_str} 第 {no_data_confirmations} 次確認無交易資料(stat={payload.get('stat')})"
@@ -182,74 +203,41 @@ def fetch_daily_quotes(
     return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
 
 
-def fetch_daily_quotes_no_permanent_mark(
+def fetch_daily_quotes_for_backfill(
+    target_date: date, max_retries: int = 3, no_data_confirm_attempts: int = 2
+) -> FetchResult:
+    """
+    抓取指定日期的全市場個股收盤行情原始資料(未清洗)——僅供「歷史回補」使用。
+
+    僅限已確定過去的日期:內部靠「連續 no_data_confirm_attempts 次、間隔數秒的
+    確認」來判定 NO_TRADING_DAY,對已經過去很久的歷史日期來說沒有歧義,但對
+    今天/近期的日期而言這種確認方式完全來不及分辨「還沒統計完」跟「真的休市」。
+    因此每日例行排程(current-day)一律改用 fetch_daily_quotes_for_daily_schedule,
+    不要在這裡呼叫本函式。詳細行為說明見 _fetch_daily_quotes。
+    """
+    return _fetch_daily_quotes(
+        target_date,
+        max_retries=max_retries,
+        confirm_no_trading_day=True,
+        no_data_confirm_attempts=no_data_confirm_attempts,
+    )
+
+
+def fetch_daily_quotes_for_daily_schedule(
     target_date: date, max_retries: int = 3
 ) -> FetchResult:
     """
-    每日排程專用版本:不做「連續確認即永久標記非交易日」的判斷,
-    因為 TWSE API 無法從回應內容區分「非交易日」與「資料尚未彙整完成」,
-    兩者 stat 訊息完全相同(已實測驗證)。
-    查無資料時單純回傳 None,交由呼叫端決定如何處理(通常是任務失敗 + 之後重試)。
+    每日例行排程專用版本:刻意不做「連續確認即判定非交易日」的判斷,查無資料
+    一律回傳 UNKNOWN_FAILURE,交由呼叫端視為「未知,稍後重試」(通常是任務
+    失敗 + 之後由 Airflow retry)。這代表:
+      - 若當天只是資料還沒統計完成,重試後通常能成功取得資料。
+      - 若當天其實是未被上游 check_trading_day 攔截到的國定假日(該函式目前只
+        檢查週末),重試耗盡後 task 會失敗並觸發告警——這是已知、可接受的誤報。
+    詳細原因說明見 _fetch_daily_quotes。
     """
-    date_str = target_date.strftime("%Y%m%d")
-    params = {"response": "json", "date": date_str, "type": "ALLBUT0999"}
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.get(TWSE_URL, params=params, headers=headers, timeout=15)
-            resp.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if resp.status_code == 403:
-                wait_time = 10 * attempt
-                print(
-                    f"⚠️ {date_str} 收到 403,等待 {wait_time} 秒後重試({attempt}/{max_retries})"
-                )
-                time.sleep(wait_time)
-                continue
-            print(f"❌ {date_str} 請求失敗(非 403): {e}")
-            return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
-        except requests.exceptions.RequestException as e:
-            print(f"❌ {date_str} 網路錯誤: {e}")
-            return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
-
-        payload = resp.json()
-
-        if payload.get("stat") != "OK":
-            print(
-                f"ℹ️ {date_str} 目前查無資料(stat={payload.get('stat')}),可能是非交易日或資料尚未彙整"
-            )
-            return FetchResult(
-                status=FetchStatus.UNKNOWN_FAILURE
-            )  # 不永久標記,單純回傳 None
-
-        tables = payload.get("tables", [])
-        if len(tables) <= DAILY_QUOTES_TABLE_INDEX:
-            print(f"⚠️ {date_str} tables 結構異常")
-            return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
-
-        target_table = tables[DAILY_QUOTES_TABLE_INDEX]
-        actual_fields = target_table.get("fields", [])
-        rows = target_table.get("data", [])
-
-        min_expected = int(1300 * 0.85)
-        if len(rows) < min_expected:
-            print(f"⚠️ {date_str} 只取得 {len(rows)} 筆,低於門檻,判定為擷取不完整")
-            return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
-
-        fields_ok = validate_fields(actual_fields)
-        print(f"✅ {date_str} 取得 {len(rows)} 筆個股資料")
-        return FetchResult(
-            status=FetchStatus.SUCCESS,
-            data={
-                "fields": actual_fields,
-                "data": rows,
-                "fields_match_expected": fields_ok,
-            },
-        )
-
-    print(f"❌ {date_str} 重試 {max_retries} 次後仍無法取得資料")
-    return FetchResult(status=FetchStatus.UNKNOWN_FAILURE)
+    return _fetch_daily_quotes(
+        target_date, max_retries=max_retries, confirm_no_trading_day=False
+    )
 
 
 # if __name__ == "__main__":
@@ -257,7 +245,7 @@ def fetch_daily_quotes_no_permanent_mark(
 #     from shared.utils import get_gcs_client, write_raw_json, BUCKET_NAME
 
 #     target_date = date(2026, 7, 9)
-#     result = fetch_daily_quotes(target_date)
+#     result = fetch_daily_quotes_for_backfill(target_date)
 #     print(result.status)
 
 #     if result.status == FetchStatus.SUCCESS:
