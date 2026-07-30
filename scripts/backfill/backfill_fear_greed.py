@@ -4,7 +4,7 @@ Fear & Greed 歷史回補
 特性: 一次 API 呼叫即可拿到整段區間,不需要迴圈、不需要斷點續跑機制。
 
 執行方式:
-    python -m scripts.backfill_fear_greed
+    python -m scripts.backfill.backfill_fear_greed
 """
 
 import sys
@@ -12,7 +12,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import (
     BUCKET_NAME,
     get_gcs_client,

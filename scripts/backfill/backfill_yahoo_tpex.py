@@ -8,7 +8,7 @@ TPEx 歷史回補(透過 Yahoo Finance)
           就拿到該股票整個回補區間的資料。
 
 執行方式:
-    python -m scripts.backfill_yahoo_tpex
+    python -m scripts.backfill.backfill_yahoo_tpex
 """
 
 import sys
@@ -17,7 +17,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import (
     BUCKET_NAME,
     get_gcs_client,

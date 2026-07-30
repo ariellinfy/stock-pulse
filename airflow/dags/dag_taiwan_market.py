@@ -133,7 +133,7 @@ def run_industry_scraper(**context):
 
 def run_completeness_check(**context):
     from shared.utils import BUCKET_NAME, load_industry_list_from_gcs
-    from shared.scan_raw_data_gaps import (
+    from shared.completeness_check import (
         check_single_day_twse_completeness,
         check_single_day_tpex_completeness,
     )

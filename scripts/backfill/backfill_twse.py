@@ -4,7 +4,7 @@ TWSE 歷史回補(透過 官方 API)
 分區方式: 按日期(dt=yyyy-MM-dd)。
 
 執行方式:
-    python -m scripts.backfill_twse
+    python -m scripts.backfill.backfill_twse
 """
 
 import sys
@@ -12,7 +12,7 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from shared.utils import BUCKET_NAME, get_gcs_client, write_raw_json, raw_blob_exists
 from scrapers.twse_client import FetchStatus, fetch_daily_quotes_for_backfill
 

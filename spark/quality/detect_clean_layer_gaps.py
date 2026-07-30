@@ -2,7 +2,7 @@
 在 clean/stock_daily/(已清洗、已過濾)這一層,用上市日期校正後的應有股票數,
 跟實際出現的股票數比對,找出交易日層級的資料缺口。
 
-用途: 跟 scripts/scan_raw_data_gaps.py(raw 層)交叉驗證同一批異常日期,
+用途: 跟 scripts/adhoc/scan_raw_data_gaps.py(raw 層)交叉驗證同一批異常日期,
       確保結論不是單一計算路徑的偶然結果。
 """
 
