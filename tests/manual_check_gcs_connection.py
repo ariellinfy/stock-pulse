@@ -7,7 +7,12 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "secrets/gcp-sa-key.json"
 BUCKET_NAME = "stock-pulse-data-lake"
 
 
-def test_connection():
+def check_connection():
+    """
+    手動驗證用,不是 pytest 測試(檔名故意不用 test_ 開頭,避免 pytest tests/
+    自動抓到這支、意外打真實 GCS)。需要真實憑證,執行方式:
+        PYTHONPATH=. python tests/manual_check_gcs_connection.py
+    """
     client = storage.Client()
     bucket = client.bucket(BUCKET_NAME)
 
@@ -22,4 +27,4 @@ def test_connection():
 
 
 if __name__ == "__main__":
-    test_connection()
+    check_connection()

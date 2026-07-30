@@ -17,9 +17,34 @@ jobs:
       - name: Install lint tools
         run: pip install flake8 black
       - name: Check formatting with black
-        run: black --check scrapers/ shared/ scripts/ spark/ --exclude="_exploration_archive|_planned"
+        run: black --check scrapers/ shared/ scripts/ spark/ tests/ --exclude="_exploration_archive|_planned"
       - name: Run flake8
-        run: flake8 scrapers/ shared/ scripts/ spark/ --max-line-length=150 --extend-ignore=E203,W503,E402 --exclude=_exploration_archive,_planned
+        run: flake8 scrapers/ shared/ scripts/ spark/ tests/ --max-line-length=150 --extend-ignore=E203,W503,E402 --exclude=_exploration_archive,_planned
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        # pyspark 4.x 需要 Java 17+(跟 spark/Dockerfile 用的版本一致)
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run tests
+        env:
+          # 測試全部用 mock,不會真的打 GCS/BigQuery;這裡只是滿足少數模組在
+          # import 當下就需要 GCP_BUCKET_NAME 存在的檢查(見 shared/utils.py)
+          GCP_BUCKET_NAME: test-bucket
+          GCP_SA_KEY_PATH: /tmp/fake-key.json
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest tests/ -v
 
   dbt-check:
     runs-on: ubuntu-latest
