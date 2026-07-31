@@ -26,6 +26,7 @@ from spark.jobs.clean_stock import (
     unify_twse,
     unify_tpex,
     filter_official_stocks,
+    explode_and_flatten,
 )
 
 
@@ -43,25 +44,15 @@ def clean_single_day(
     twse_path = gcs_uri(bucket_name, raw_blob_path(RAW_TWSE_DAILY, "dt", target_date))
     tpex_path = gcs_uri(bucket_name, raw_blob_path(RAW_TPEX_DAILY, "dt", target_date))
 
-    # 單日原始檔案結構是 {"fields":[...], "data":[[...]]},用我們熟悉的單日讀取方式,
-    # 不需要像 backfill 版本那樣 explode 多天份的巢狀結構
+    # 單日原始檔案結構是 {"fields":[...], "data":[[...]]},沒有 backfill 版本
+    # 靠 Hive-style 分區資料夾自動推斷出的 dt 欄位,這裡手動加上再攤平
     twse_raw_json = spark.read.option("multiline", "true").json(twse_path)
-    twse_df = spark.createDataFrame(
-        twse_raw_json.select(F.explode("data").alias("row")).rdd.map(
-            lambda r: r["row"]
-        ),
-        schema=TWSE_RAW_SCHEMA,
-    )
-    twse_df = twse_df.withColumn("dt", F.lit(target_date))
+    twse_raw_json = twse_raw_json.withColumn("dt", F.lit(target_date))
+    twse_df = explode_and_flatten(twse_raw_json, TWSE_RAW_SCHEMA)
 
     tpex_raw_json = spark.read.option("multiline", "true").json(tpex_path)
-    tpex_df = spark.createDataFrame(
-        tpex_raw_json.select(F.explode("data").alias("row")).rdd.map(
-            lambda r: r["row"]
-        ),
-        schema=TPEX_RAW_SCHEMA,
-    )
-    tpex_df = tpex_df.withColumn("dt", F.lit(target_date))
+    tpex_raw_json = tpex_raw_json.withColumn("dt", F.lit(target_date))
+    tpex_df = explode_and_flatten(tpex_raw_json, TPEX_RAW_SCHEMA)
 
     twse_cleaned = clean_twse(twse_df)
     twse_unified = unify_twse(twse_cleaned)

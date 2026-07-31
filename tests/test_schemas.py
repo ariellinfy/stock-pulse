@@ -21,7 +21,7 @@ def test_assert_fields_match_raises_on_mismatch():
 
 def test_twse_schema_field_count_matches_scraper_expected_fields():
     """
-    spark/jobs/backfill_clean_stock.py::flatten_to_columns 是靠「位置」把
+    spark/jobs/clean_stock.py::explode_and_flatten 是靠「位置」把
     scraper 抓回來的每一列(list of str)對應到 TWSE_RAW_SCHEMA 的欄位順序,
     兩邊的欄位數量若不一致,資料會整批位移錯位卻不會有任何錯誤訊息。
     這支測試釘住兩邊數量必須一致,欄位定義若之後任一邊調整,這裡會先炸開。

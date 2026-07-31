@@ -1,7 +1,13 @@
 from datetime import datetime, timezone
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    DoubleType,
+    ArrayType,
+)
 
 from spark.common.schemas import TWSE_RAW_SCHEMA
 from spark.jobs.clean_stock import (
@@ -14,6 +20,7 @@ from spark.jobs.clean_stock import (
     clean_yahoo_history,
     clean_fear_greed_history,
     merge_markets,
+    explode_and_flatten,
 )
 
 
@@ -40,6 +47,57 @@ def test_safe_cast_numeric_strips_commas_and_nulls_placeholders():
         for r in df.select(safe_cast_numeric("v", DoubleType()).alias("v")).collect()
     ]
     assert values == [1234.0, 56.7, -12.5, None, None, None]
+
+
+def test_explode_and_flatten_maps_array_positions_to_named_columns():
+    """
+    這是 clean_stock_daily.py(單一檔案,手動加 dt)與 backfill_clean_stock.py
+    (整個資料夾 glob,dt 由 Hive-style 分區資料夾自動推斷)共用的攤平邏輯:
+    釘住「陣列位置 → schema 具名欄位」的對應關係,以及 fields 欄位不該流入輸出。
+    """
+    spark = _spark()
+    schema = StructType(
+        [StructField("a", StringType(), True), StructField("b", StringType(), True)]
+    )
+    raw_schema = StructType(
+        [
+            StructField("dt", StringType(), True),
+            StructField("fields", StringType(), True),  # 不該出現在輸出裡
+            StructField("data", ArrayType(ArrayType(StringType())), True),
+        ]
+    )
+    df = spark.createDataFrame(
+        [("2026-07-09", "irrelevant", [["v1", "v2"], ["v3", "v4"]])],
+        schema=raw_schema,
+    )
+
+    result = explode_and_flatten(df, schema)
+
+    assert set(result.columns) == {"dt", "a", "b"}
+    rows = sorted((r["dt"], r["a"], r["b"]) for r in result.collect())
+    assert rows == [("2026-07-09", "v1", "v2"), ("2026-07-09", "v3", "v4")]
+
+
+def test_explode_and_flatten_excludes_rows_with_null_data():
+    """模擬 backfill 讀整個資料夾時混進 _no_data_marker.json(沒有 data 欄位)的情況。"""
+    spark = _spark()
+    schema = StructType([StructField("a", StringType(), True)])
+    raw_schema = StructType(
+        [
+            StructField("dt", StringType(), True),
+            StructField("data", ArrayType(ArrayType(StringType())), True),
+        ]
+    )
+    df = spark.createDataFrame(
+        [
+            ("2026-07-09", [["v1"]]),
+            ("2026-07-10", None),  # 標記檔,沒有 data
+        ],
+        schema=raw_schema,
+    )
+
+    result = explode_and_flatten(df, schema)
+    assert [(r["dt"], r["a"]) for r in result.collect()] == [("2026-07-09", "v1")]
 
 
 def test_clean_twse_extracts_change_direction_and_signs_change_amount():
@@ -332,6 +390,8 @@ def test_merge_markets_unions_after_filtering_official_stocks():
 
 if __name__ == "__main__":
     test_safe_cast_numeric_strips_commas_and_nulls_placeholders()
+    test_explode_and_flatten_maps_array_positions_to_named_columns()
+    test_explode_and_flatten_excludes_rows_with_null_data()
     test_clean_twse_extracts_change_direction_and_signs_change_amount()
     test_unify_twse_sets_market_literal_and_nulls_tpex_only_columns()
     test_filter_official_stocks_excludes_unlisted_ids()

@@ -26,6 +26,37 @@ def safe_cast_numeric(col_name: str, target_type):
     ).otherwise(F.lit(None).cast(target_type))
 
 
+def explode_and_flatten(raw_df, schema):
+    """
+    把 raw JSON 讀入後的 {fields, data: [[...], ...]} 巢狀結構,展開成 schema
+    定義的具名欄位。data 陣列裡每個元素依「位置」對應到 schema.fields 的順序,
+    兩者數量必須一致(spark/common/schemas.py 有測試釘住這個不變量)。
+
+    daily 版本(單一檔案)與 backfill 版本(整個資料夾 glob)過去各自寫了一套
+    攤平邏輯,這裡統一成一份共用實作:
+      - 明確排除沒有 data 欄位的記錄(backfill 讀整個資料夾時,可能混進
+        _no_data_marker.json 這種標記檔;daily 讀單一檔案不會遇到,過濾一次
+        沒有副作用)
+      - raw_df 除了 data/fields 之外若還有其他欄位(例如 dt——backfill 版本
+        從 Hive-style 分區資料夾自動推斷得到,daily 版本由呼叫端手動加上),
+        都會原樣保留在輸出裡
+    """
+    raw_df = raw_df.filter(F.col("data").isNotNull())
+    other_cols = [c for c in raw_df.columns if c not in ("data", "fields")]
+
+    exploded = raw_df.select(
+        *[F.col(c) for c in other_cols],
+        F.explode(F.col("data")).alias("row_values"),
+    )
+
+    field_names = [f.name for f in schema.fields]
+    select_exprs = [F.col(c) for c in other_cols]
+    for i, name in enumerate(field_names):
+        select_exprs.append(F.col("row_values")[i].alias(name))
+
+    return exploded.select(*select_exprs)
+
+
 def filter_official_stocks(df, official_stock_ids: list[str]):
     """
     用官方產業分類清單過濾,只保留真正的股票(排除權證/可轉債/特殊 ETF 等)。
